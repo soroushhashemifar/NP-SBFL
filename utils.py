@@ -1,14 +1,14 @@
-from lrp_src.lrp import LRPModel
-import torch
-import torch.nn.functional as F
-from torch.autograd import Variable
-from sklearn.cluster import KMeans, Birch
-from sklearn.metrics import silhouette_score
-from sklearn.decomposition import IncrementalPCA
-from sklearn.pipeline import Pipeline
-from config import args
 import math
+
 import numpy as np
+import torch
+from sklearn.cluster import Birch, KMeans
+from sklearn.decomposition import IncrementalPCA
+from sklearn.metrics import silhouette_score
+from sklearn.pipeline import Pipeline
+from torch.autograd import Variable
+
+from lrp_src.lrp import LRPModel
 
 
 def train(epoch, model, train_loader, optimizer, args):
@@ -107,12 +107,8 @@ class myLRPModel(LRPModel):
             if layer.__class__.__name__ not in self.relevancy_layers_to_filter:
                 relevances.append(relevance)
 
-        # relevances = [r.view(1, -1) for r in relevances]
-        # activations_to_return = [a.view(1, -1) for a in activations_to_return]
-
         return relevances[::-1], activations_to_return[::-1]
 
-# import time
 
 def min_subarray_with_sum_gt_target(arr, target):
     positive_relevancy_indices = torch.where(arr > 0)[0]
@@ -144,30 +140,13 @@ def jaccard_sim(list1, list2):
     union = (len(list1) + len(list2)) - intersection
     return float(intersection) / union
 
-def get_best_number_of_clusters(data):
+def get_best_parameters(data, PCA_n_components, Birch_thresholds, Birch_n_clusters, batch_size):
     results = []
-    for n_components in args['PCA_n_components']:
-        for n_clusters in args['KMEANS_n_clusters']:
-            clustering = Pipeline([
-                ('dim_red', IncrementalPCA(n_components=n_components, batch_size=args['batch_size'])), 
-                ('clustering', KMeans(n_clusters=n_clusters, random_state=4))
-                ])
-            cluster_labels = clustering.fit_predict(data)
-            silhouette_avg = silhouette_score(data, cluster_labels)
-
-            results.append((n_clusters, n_components, silhouette_avg))
-        
-    optimal_n_clusters, optimal_n_components, _ = max(results, key=lambda item: item[2])
-
-    return optimal_n_clusters, optimal_n_components
-
-def get_best_parameters(data):
-    results = []
-    for n_components in args['PCA_n_components']:
-        for threshold in args['Birch_thresholds']:
-            for n_clusters in args['KMEANS_n_clusters']:
+    for n_components in PCA_n_components:
+        for threshold in Birch_thresholds:
+            for n_clusters in Birch_n_clusters:
                 clustering = Pipeline([
-                    ('dim_red', IncrementalPCA(n_components=n_components, batch_size=args['batch_size'])), 
+                    ('dim_red', IncrementalPCA(n_components=n_components, batch_size=batch_size)), 
                     ('clustering', Birch(threshold=threshold, n_clusters=n_clusters))
                     ])
                 cluster_labels = clustering.fit_predict(data)
@@ -175,8 +154,6 @@ def get_best_parameters(data):
                 silhouette_avg = silhouette_score(data, cluster_labels)
 
                 results.append((threshold, n_clusters, n_components, silhouette_avg))
-
-                # print(n_components, threshold, n_clusters)
         
     optimal_threshold, optimal_n_clusters, optimal_n_components, _ = max(results, key=lambda item: item[3])
 
@@ -191,9 +168,6 @@ def get_ochiai_score(path_spectrum):
     total_faileds =  path_spectrum['A_F'] + path_spectrum['I_F']
     total_actives = path_spectrum['A_P'] + path_spectrum['A_F']
     return path_spectrum['A_F'] / (math.sqrt(total_faileds * total_actives) + 0.0000001)
-
-def get_Dstar_score(path_spectrum, star_value):
-    return (path_spectrum['A_F'] ** star_value) / (path_spectrum['A_P'] +  path_spectrum['I_F'] + 0.0000001)
 
 def get_BARINEL_score(path_spectrum):
     return 1 - path_spectrum["A_P"] / (path_spectrum["A_P"] + path_spectrum["A_F"] + 0.0000001)

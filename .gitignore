@@ -4,3 +4,4 @@ activations*/
 data/
 representations*/
 pickles/
+_config.py
