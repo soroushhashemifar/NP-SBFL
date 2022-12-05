@@ -83,7 +83,6 @@ class DeepCP:
             os.mkdir(self.path_to_save_representations)
 
         class_separated_samples = {}
-        index = 0
         for data, target in tqdm.tqdm(self.train_loader):
             if self.cuda:
                 data, target = data.cpu(), target.cpu()
@@ -106,11 +105,6 @@ class DeepCP:
 
             class_samples.append((representation_name, activations_name))
             class_separated_samples[predicted_class] = class_samples
-
-            index += 1
-
-            if index == 200:
-                break
             
         return class_separated_samples
 
@@ -172,7 +166,6 @@ class DeepCP:
         for key in decision_graph.keys():
             cdp_spectrums[key] = {"A_P": 0, "I_P": 0, "A_F": 0, "I_F": 0}
 
-        index = 0
         for data, target in tqdm.tqdm(self.test_loader):
             if self.cuda:
                 data, target = data.cpu(), target.cpu()
@@ -227,11 +220,6 @@ class DeepCP:
                     clusters_of_target_class = list(range(decision_kmeans[target.item()]["clustering"].n_clusters))
                     for cluster_index in clusters_of_target_class:
                         cdp_spectrums[(target.item(), cluster_index)]["I_F"] = cdp_spectrums[(target.item(), cluster_index)]["I_F"] + 1
-
-            index += 1
-
-            if index == 100:
-                break
 
         return cdp_spectrums
 
