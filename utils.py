@@ -1,0 +1,199 @@
+from lrp_src.lrp import LRPModel
+import torch
+import torch.nn.functional as F
+from torch.autograd import Variable
+from sklearn.cluster import KMeans, Birch
+from sklearn.metrics import silhouette_score
+from sklearn.decomposition import IncrementalPCA
+from sklearn.pipeline import Pipeline
+from config import args
+import math
+import numpy as np
+
+
+def train(epoch, model, train_loader, optimizer, args):
+    model.train()
+    for batch_idx, (data, target) in enumerate(train_loader):
+        if args['cuda']:
+            data, target = data.cuda(), target.cuda()
+        #Variables in Pytorch are differenciable. 
+        data, target = Variable(data), Variable(target)
+        #This will zero out the gradients for this batch. 
+        optimizer.zero_grad()
+        output = model(data)
+        # Calculate the loss The negative log likelihood loss. It is useful to train a classification problem with C classes.
+        loss = eval(f"F.{args['loss']}")(output, target)
+        #dloss/dx for every Variable 
+        loss.backward()
+        #to do a one-step update on our parameter.
+        optimizer.step()
+        #Print out the loss periodically. 
+        if batch_idx % args['log_interval'] == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                epoch, batch_idx * len(data), len(train_loader.dataset),
+                100. * batch_idx / len(train_loader), loss.data))
+
+def test(model, test_loader, args, scheduler):
+    model.eval()
+    test_loss = 0
+    correct = 0
+    for data, target in test_loader:
+        if args['cuda']:
+            data, target = data.cuda(), target.cuda()
+        data, target = Variable(data), Variable(target)
+        output = model(data)
+        test_loss += eval(f"F.{args['loss']}")(output, target, size_average=False).data # sum up batch loss
+        pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
+        correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
+
+    test_loss /= len(test_loader.dataset)
+    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+        test_loss, correct, len(test_loader.dataset),
+        100. * correct / len(test_loader.dataset)))
+
+    scheduler.step(test_loss)
+
+
+class myLRPModel(LRPModel):
+
+    def __init__(self, model: torch.nn.Module, layers_structure: list) -> None:
+        self.layers_structure = layers_structure
+        self.relevancy_layers_to_filter = ["RelevancePropagationFlatten", "RelevancePropagationReLU", "RelevancePropagationDropout", "RelevancePropagationIdentity"]
+
+        super().__init__(model)
+        
+    def _get_layer_operations(self) -> torch.nn.ModuleList:
+        """Get all network operations and store them in a list.
+        This method is adapted to VGG networks from PyTorch's Model Zoo.
+        Modify this method to work also for other networks.
+        Returns:
+            Layers of original model stored in module list.
+        """
+        layers = torch.nn.ModuleList(self.layers_structure)
+
+        return layers
+
+    def forward(self, x: torch.tensor) -> torch.tensor:
+        """Forward method that first performs standard inference followed by layer-wise relevance propagation.
+        Args:
+            x: Input tensor representing an image / images (N, C, H, W).
+        Returns:
+            Tensor holding relevance scores with dimensions (N, 1, H, W).
+        """
+        activations = list()
+
+        # Run inference and collect activations.
+        with torch.no_grad():
+            # Replace image with ones avoids using image information for relevance computation.
+            activations.append(torch.ones_like(x))
+            for layer in self.layers:
+                x = layer.forward(x)
+                activations.append(x)
+
+        # Reverse order of activations to run backwards through model
+        activations = activations[::-1]
+        activations_to_return = activations.copy()
+        activations_to_return = [activations_to_return[i] for i, layer in enumerate(self.lrp_layers) if layer.__class__.__name__ not in self.relevancy_layers_to_filter]
+        activations = [a.data.requires_grad_(True) for a in activations]
+
+        # Initial relevance scores are the network's output activations
+        relevance = torch.softmax(activations.pop(0), dim=-1)  # Unsupervised
+
+        # Perform relevance propagation
+        relevances = [relevance]
+        for i, layer in enumerate(self.lrp_layers):
+            relevance = layer.forward(activations.pop(0), relevance)
+
+            if layer.__class__.__name__ not in self.relevancy_layers_to_filter:
+                relevances.append(relevance)
+
+        # relevances = [r.view(1, -1) for r in relevances]
+        # activations_to_return = [a.view(1, -1) for a in activations_to_return]
+
+        return relevances[::-1], activations_to_return[::-1]
+
+# import time
+
+def min_subarray_with_sum_gt_target(arr, target):
+    positive_relevancy_indices = torch.where(arr > 0)[0]
+
+    values = np.vstack([positive_relevancy_indices.cpu().detach().numpy()[np.newaxis, ...], -arr[positive_relevancy_indices].cpu().detach().numpy()[np.newaxis, ...]])
+    sorted_values = np.sort(values)
+    indices = sorted_values[0, :]
+    values = -1 * sorted_values[1, :]
+
+    cs = np.cumsum(values)
+    target_index = np.where(cs > target)[0]
+    if len(target_index) == 0:
+        return torch.tensor(sorted(indices[:int(len(indices)*0.1)].tolist()), dtype=torch.long)
+
+    target_index = target_index[0]
+
+    if target_index != 0:
+        selected_indices = indices[:target_index]
+    else:
+        selected_indices = [indices[0]]
+
+    selected_indices = torch.tensor(sorted(selected_indices), dtype=torch.long)
+
+    return selected_indices
+
+def jaccard_sim(list1, list2):
+    """Define Jaccard Similarity function for two sets"""
+    intersection = len(list(set(list1).intersection(list2)))
+    union = (len(list1) + len(list2)) - intersection
+    return float(intersection) / union
+
+def get_best_number_of_clusters(data):
+    results = []
+    for n_components in args['PCA_n_components']:
+        for n_clusters in args['KMEANS_n_clusters']:
+            clustering = Pipeline([
+                ('dim_red', IncrementalPCA(n_components=n_components, batch_size=args['batch_size'])), 
+                ('clustering', KMeans(n_clusters=n_clusters, random_state=4))
+                ])
+            cluster_labels = clustering.fit_predict(data)
+            silhouette_avg = silhouette_score(data, cluster_labels)
+
+            results.append((n_clusters, n_components, silhouette_avg))
+        
+    optimal_n_clusters, optimal_n_components, _ = max(results, key=lambda item: item[2])
+
+    return optimal_n_clusters, optimal_n_components
+
+def get_best_parameters(data):
+    results = []
+    for n_components in args['PCA_n_components']:
+        for threshold in args['Birch_thresholds']:
+            for n_clusters in args['KMEANS_n_clusters']:
+                clustering = Pipeline([
+                    ('dim_red', IncrementalPCA(n_components=n_components, batch_size=args['batch_size'])), 
+                    ('clustering', Birch(threshold=threshold, n_clusters=n_clusters))
+                    ])
+                cluster_labels = clustering.fit_predict(data)
+                if len(np.unique(cluster_labels)) < 2: continue
+                silhouette_avg = silhouette_score(data, cluster_labels)
+
+                results.append((threshold, n_clusters, n_components, silhouette_avg))
+
+                # print(n_components, threshold, n_clusters)
+        
+    optimal_threshold, optimal_n_clusters, optimal_n_components, _ = max(results, key=lambda item: item[3])
+
+    return optimal_threshold, optimal_n_clusters, optimal_n_components
+
+def get_tarantula_score(path_spectrum):
+    a_f_ratio = path_spectrum['A_F'] / (path_spectrum['A_F'] + path_spectrum['I_F'] + 0.0000001)
+    a_p_ratio = path_spectrum['A_P'] / (path_spectrum['A_P'] + path_spectrum['I_P'] + 0.0000001)
+    return a_f_ratio / (a_f_ratio + a_p_ratio + 0.0000001)
+
+def get_ochiai_score(path_spectrum):
+    total_faileds =  path_spectrum['A_F'] + path_spectrum['I_F']
+    total_actives = path_spectrum['A_P'] + path_spectrum['A_F']
+    return path_spectrum['A_F'] / (math.sqrt(total_faileds * total_actives) + 0.0000001)
+
+def get_Dstar_score(path_spectrum, star_value):
+    return (path_spectrum['A_F'] ** star_value) / (path_spectrum['A_P'] +  path_spectrum['I_F'] + 0.0000001)
+
+def get_BARINEL_score(path_spectrum):
+    return 1 - path_spectrum["A_P"] / (path_spectrum["A_P"] + path_spectrum["A_F"] + 0.0000001)
