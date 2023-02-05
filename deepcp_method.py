@@ -1,8 +1,6 @@
-from ipaddress import collapse_addresses
 import os
 import pickle
 import random
-from lrp_src.visualize import plot_relevance_scores
 
 import numpy as np
 import torch
@@ -13,22 +11,21 @@ from sklearn.decomposition import IncrementalPCA
 from sklearn.pipeline import Pipeline
 from torch.autograd import Variable
 
-from utils import (get_best_parameters, jaccard_sim, min_subarray_with_sum_gt_target, 
+from utils import (myLRPModel, get_best_parameters, jaccard_sim, min_subarray_with_sum_gt_target, 
                     get_tarantula_score, get_ochiai_score, get_BARINEL_score)
 
 
 class DeepCP:
 
-    def __init__(self, model_name, lrp_model, layer_shapes, path_to_save_activations, 
-                    path_to_save_representations, train_loader, test_loader, device="cpu", batch_size=16,
-                    alpha=0.9, beta=0.6, min_match=0.8, PCA_n_components=[], Birch_thresholds=[], Birch_n_clusters=[],
-                    SFL_strategy="tarantual"):
+    def __init__(self, model_name, model, layers_structure, input_size=(1, 28, 28), train_loader=None, test_loader=None, 
+                    path_to_save_pickles="pickles", device="cpu", batch_size=16, alpha=0.9, 
+                    beta=0.6, min_match=0.8, PCA_n_components=[], Birch_thresholds=[], Birch_n_clusters=[]):
         self.model_name = model_name
-        self.lrp_model = lrp_model
-        self.layer_shapes = layer_shapes
+        self.input_size = input_size
 
-        self.path_to_save_activations = path_to_save_activations
-        self.path_to_save_representations = path_to_save_representations
+        self.path_to_save_activations = self.model_name + "_activations"
+        self.path_to_save_representations = self.model_name + "_representations"
+        self.path_to_save_pickles = path_to_save_pickles
 
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -43,7 +40,9 @@ class DeepCP:
         self.Birch_thresholds = Birch_thresholds
         self.Birch_n_clusters = Birch_n_clusters
 
-        self.SFL_strategy = SFL_strategy
+        self.lrp_model = myLRPModel(model, layers_structure)
+        relevancy, _ = self.lrp_model.forward(torch.randn((1, *input_size)))
+        self.layer_shapes = [list(r[0].shape)[0] for r in relevancy[1:]]
 
     def get_relevancy_and_activations(self, data):
         pass
@@ -112,7 +111,7 @@ class DeepCP:
         # TODO: reform the cdp representation because of its huge size for large networks
 
         decision_graph = {}
-        decision_kmeans = {}
+        decision_birch = {}
         for c in tqdm.tqdm(sorted(class_separated_samples.keys())):
             # Path Abstraction: Intra-Class Path Clustering
             if len(class_separated_samples[c]) < 4:
@@ -128,12 +127,12 @@ class DeepCP:
                 sample_activations.append(sample_activs)
 
             optimal_threshold, optimal_n_clusters, optimal_n_components = get_best_parameters(cdp_representations, self.PCA_n_components, self.Birch_thresholds, self.Birch_n_clusters, self.batch_size)
-            decision_kmeans[c] = Pipeline([
+            decision_birch[c] = Pipeline([
                 ('dim_red', IncrementalPCA(n_components=optimal_n_components, batch_size=self.batch_size)), 
                 ('clustering', Birch(threshold=optimal_threshold, n_clusters=optimal_n_clusters))
                 ])
-            decision_kmeans[c].fit(cdp_representations)
-            cluster_labels = decision_kmeans[c].predict(cdp_representations)
+            decision_birch[c].fit(cdp_representations)
+            cluster_labels = decision_birch[c].predict(cdp_representations)
 
             # Path Abstraction: Path Merging
             for cluster_index in set(cluster_labels):
@@ -153,15 +152,15 @@ class DeepCP:
                     s_hat_beta.append(abstract_critical_neurons)
 
                 cluster_samples_activations = [sample_activations[i] for i in np.where(cluster_labels == cluster_index)[0]]
-                activations_filename = self.path_to_save_activations + f"/cluster_samples_activations_{c}_{cluster_index}.pickle"
+                activations_filename = os.path.join(self.path_to_save_activations, f"cluster_samples_activations_{c}_{cluster_index}.pickle")
                 with open(activations_filename, 'wb') as handle:
                     pickle.dump(cluster_samples_activations, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
                 decision_graph[(c, cluster_index)] = s_hat_beta
 
-        return decision_graph, decision_kmeans
+        return decision_graph, decision_birch
 
-    def calculate_acdp_hit_spectrums(self, decision_graph, decision_kmeans):
+    def calculate_acdp_hit_spectrums(self, decision_graph, decision_birch):
         cdp_spectrums = {}
         for key in decision_graph.keys():
             cdp_spectrums[key] = {"A_P": 0, "I_P": 0, "A_F": 0, "I_F": 0}
@@ -173,10 +172,10 @@ class DeepCP:
             data, target = Variable(data), Variable(target)
 
             cdp_representation, critical_neurons_layers_test, predicted_class, activations = self.generate_cdp_representation(data)
-            if (cdp_representation is None and critical_neurons_layers_test is None and predicted_class is None) or predicted_class not in decision_kmeans.keys():
+            if (cdp_representation is None and critical_neurons_layers_test is None and predicted_class is None) or predicted_class not in decision_birch.keys():
                 continue
 
-            predicted_cluster = decision_kmeans[predicted_class].predict(cdp_representation[None, ...])[0]
+            predicted_cluster = decision_birch[predicted_class].predict(cdp_representation[None, ...])[0]
             critical_neurons_layers_abstract_cdp = decision_graph[(predicted_class, predicted_cluster)]
 
             jacc_sims_of_cdps = [jaccard_sim(s_i.tolist(), s_hat_i.tolist()) for s_i, s_hat_i in zip(critical_neurons_layers_test, critical_neurons_layers_abstract_cdp)]
@@ -210,41 +209,72 @@ class DeepCP:
                 if predicted_class == target.item():
                     cdp_spectrums[(predicted_class, predicted_cluster)]["A_P"] = cdp_spectrums[(predicted_class, predicted_cluster)]["A_P"] + 1
                     # increase I_P for other clusters
-                    for class_index in decision_kmeans.keys():
-                        for cluster_index in range(decision_kmeans[class_index]["clustering"].n_clusters):
+                    for class_index in decision_birch.keys():
+                        for cluster_index in range(decision_birch[class_index]["clustering"].n_clusters):
                             if (class_index, cluster_index) != (predicted_class, predicted_cluster):
                                 cdp_spectrums[(class_index, cluster_index)]["I_P"] = cdp_spectrums[(class_index, cluster_index)]["I_P"] + 1
                 else:
                     cdp_spectrums[(predicted_class, predicted_cluster)]["A_F"] = cdp_spectrums[(predicted_class, predicted_cluster)]["A_F"] + 1
                     # increase I_F for corresponding cluster in target class
-                    clusters_of_target_class = list(range(decision_kmeans[target.item()]["clustering"].n_clusters))
+                    clusters_of_target_class = list(range(decision_birch[target.item()]["clustering"].n_clusters))
                     for cluster_index in clusters_of_target_class:
                         cdp_spectrums[(target.item(), cluster_index)]["I_F"] = cdp_spectrums[(target.item(), cluster_index)]["I_F"] + 1
 
         return cdp_spectrums
 
-    def run(self):
-        class_separated_samples = self.generate_class_separated_cdps()
-        decision_graph, decision_kmeans = self.generate_abstract_cdps(class_separated_samples)
-        cdp_spectrums = self.calculate_acdp_hit_spectrums(decision_graph, decision_kmeans)
-
+    def get_scores_from_spectrums(self, cdp_spectrums, SFL_strategy):
         scores = []
         for key, path_spectrum in cdp_spectrums.items():
-            if self.SFL_strategy == "tarantula":
+            if SFL_strategy == "tarantula":
                 score = get_tarantula_score(path_spectrum)
-            elif self.SFL_strategy == "ochiai":
+            elif SFL_strategy == "ochiai":
                 score = get_ochiai_score(path_spectrum)
-            elif self.SFL_strategy == "barinel":
+            elif SFL_strategy == "barinel":
                 score = get_BARINEL_score(path_spectrum)
             else:
                 raise Exception("wrong SFL strategy!")
                 
             scores.append((key, score))
 
+        return scores
+
+    def run(self):
+        if not os.path.isdir(self.path_to_save_pickles):
+            os.makedirs(self.path_to_save_pickles)
+
+        class_separated_samples = self.generate_class_separated_cdps()
+        decision_graph, decision_birch = self.generate_abstract_cdps(class_separated_samples)
+
+        with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_class_separated_samples.pickle"), 'wb') as handle1, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_graph.pickle"), 'wb') as handle2, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_birch.pickle"), 'wb') as handle3:
+            pickle.dump(class_separated_samples, handle1, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(decision_graph, handle2, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(decision_birch, handle3, protocol=pickle.HIGHEST_PROTOCOL)                
+
+        cdp_spectrums = self.calculate_acdp_hit_spectrums(decision_graph, decision_birch)
+
+        with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_cdp_spectrums.pickle"), 'wb') as handle:
+            pickle.dump(cdp_spectrums, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        if not os.path.isdir("results"):
+            os.makedirs("results")
+
+        scores = self.get_scores_from_spectrums(cdp_spectrums, "tarantula")
         scores = sorted(scores, key=lambda item: -item[1])
-        with open(f"results_{self.model_name}_{self.SFL_strategy}.txt", "w") as file:
-            for cdp, score in scores:
-                file.write(f"{cdp}, score = {score}\n")
-                _cdp = str(list(map(lambda item: item.tolist(), decision_graph[cdp])))
-                file.write(f"{_cdp}\n\n")
-    
+        with open(os.path.join("results", f"{self.model_name}_tarantula.txt"), "w") as file:
+            for cdp_class, score in scores:
+                cdp = str(list(map(lambda item: item.tolist(), decision_graph[cdp_class])))
+                file.write(f"{cdp_class}\t{score}\t{cdp}\n")
+
+        scores = self.get_scores_from_spectrums(cdp_spectrums, "ochiai")
+        scores = sorted(scores, key=lambda item: -item[1])
+        with open(os.path.join("results", f"{self.model_name}_ochiai.txt"), "w") as file:
+            for cdp_class, score in scores:
+                cdp = str(list(map(lambda item: item.tolist(), decision_graph[cdp_class])))
+                file.write(f"{cdp_class}\t{score}\t{cdp}\n")
+
+        scores = self.get_scores_from_spectrums(cdp_spectrums, "barinel")
+        scores = sorted(scores, key=lambda item: -item[1])
+        with open(os.path.join("results", f"{self.model_name}_barinel.txt"), "w") as file:
+            for cdp_class, score in scores:
+                cdp = str(list(map(lambda item: item.tolist(), decision_graph[cdp_class])))
+                file.write(f"{cdp_class}\t{score}\t{cdp}\n")

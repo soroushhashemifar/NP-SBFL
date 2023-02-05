@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 import torch
-from sklearn.cluster import Birch, KMeans
+from sklearn.cluster import Birch
 from sklearn.decomposition import IncrementalPCA
 from sklearn.metrics import silhouette_score
 from sklearn.pipeline import Pipeline
