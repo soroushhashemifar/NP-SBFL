@@ -95,8 +95,6 @@ def synthesize_testset():
                 avg_grad[avg_grad < -distance] = -distance
 
                 perturbed_data[0, :, i, j] = data[0, :, i, j] + avg_grad
-                # perturbed_data[perturbed_data < 0.] = 0.
-                # perturbed_data[perturbed_data > 1.] = 1.
 
         data = data[0].permute(1, 2, 0).numpy()
         perturbed_data = perturbed_data[0].permute(1, 2, 0).numpy()
@@ -109,24 +107,15 @@ def synthesize_testset():
 
 class SynthesizedDataset(torch.utils.data.Dataset):
 
-    def __init__(self, dataset, transform=None):
+    def __init__(self, dataset):
         self.dataset = dataset
-
-        self.transform = transform
 
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, idx):
         data, perturbed_data, label = self.dataset[idx]
-        label = label[0]
-
         perturbed_data = torch.tensor(perturbed_data).permute(2, 0, 1)
-
-        # print(perturbed_data.min(), perturbed_data.max())
-
-        # if self.transform:
-        #     perturbed_data = self.transform(perturbed_data)
 
         return perturbed_data, label
 
@@ -135,12 +124,7 @@ def repair_model():
     with open("./pickles/synthesized_dataset_Model_3.pickle", 'rb') as handle:
         synthesized_dataset = pickle.load(handle)
 
-    transform=transforms.Compose([
-                            transforms.ToTensor(),
-                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                        ])
-
-    synth_dataset = SynthesizedDataset(synthesized_dataset, transform=transform)
+    synth_dataset = SynthesizedDataset(synthesized_dataset)
     synth_loader = torch.utils.data.DataLoader(
         synth_dataset,
         batch_size=128, shuffle=True)
@@ -168,7 +152,7 @@ def repair_model():
     test(model, test_loader, parameters, scheduler=None)
 
     learning_rate = 0.01
-    num_epochs = 10
+    num_epochs = 20
 
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
     for epoch in range(1, num_epochs + 1):
@@ -177,5 +161,5 @@ def repair_model():
     print("Evaluation on testset (after finetune):")
     test(model, test_loader, parameters, scheduler=None)
 
-synthesize_testset()
+# synthesize_testset()
 repair_model()
