@@ -7,14 +7,15 @@ from sklearn.decomposition import IncrementalPCA
 from sklearn.metrics import silhouette_score
 from sklearn.pipeline import Pipeline
 from torch.autograd import Variable
+from torch.nn import functional as F
 
 from lrp_src.lrp import LRPModel
 
 
-def train(epoch, model, train_loader, optimizer, args):
+def train(epoch, model, train_loader, optimizer, parameters):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
-        if args['cuda']:
+        if parameters['cuda']:
             data, target = data.cuda(), target.cuda()
         #Variables in Pytorch are differenciable. 
         data, target = Variable(data), Variable(target)
@@ -22,27 +23,27 @@ def train(epoch, model, train_loader, optimizer, args):
         optimizer.zero_grad()
         output = model(data)
         # Calculate the loss The negative log likelihood loss. It is useful to train a classification problem with C classes.
-        loss = eval(f"F.{args['loss']}")(output, target)
+        loss = eval(f"F.{parameters['loss']}")(output, target)
         #dloss/dx for every Variable 
         loss.backward()
         #to do a one-step update on our parameter.
         optimizer.step()
         #Print out the loss periodically. 
-        if batch_idx % args['log_interval'] == 0:
+        if batch_idx % parameters['log_interval'] == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.data))
 
-def test(model, test_loader, args, scheduler):
+def test(model, test_loader, parameters, scheduler=None):
     model.eval()
     test_loss = 0
     correct = 0
     for data, target in test_loader:
-        if args['cuda']:
+        if parameters['cuda']:
             data, target = data.cuda(), target.cuda()
         data, target = Variable(data), Variable(target)
         output = model(data)
-        test_loss += eval(f"F.{args['loss']}")(output, target, size_average=False).data # sum up batch loss
+        test_loss += eval(f"F.{parameters['loss']}")(output, target, reduction='sum').data # sum up batch loss
         pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
         correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
 
@@ -51,7 +52,8 @@ def test(model, test_loader, args, scheduler):
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
 
-    scheduler.step(test_loss)
+    if scheduler is not None:
+        scheduler.step(test_loss)
 
 
 class myLRPModel(LRPModel):
