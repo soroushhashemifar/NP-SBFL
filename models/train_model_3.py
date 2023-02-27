@@ -80,4 +80,4 @@ if __name__ == "__main__":
         train(epoch, model, train_loader, optimizer, parameters)
         test(model, test_loader, parameters, scheduler)
 
-    torch.save(model.state_dict(), "./mymodel_3.pth")
+    torch.save(model.state_dict(), "./Model_3.pth")

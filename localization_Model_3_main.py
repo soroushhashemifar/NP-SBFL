@@ -40,7 +40,7 @@ if __name__ == "__main__":
         batch_size=1, shuffle=True)
 
     model = Net()
-    model.load_state_dict(torch.load("./models/mymodel_3.pth", map_location="cpu"))
+    model.load_state_dict(torch.load("./models/Model_3.pth", map_location="cpu"))
     model = model.to("cpu")
     model.eval()
 
@@ -57,6 +57,7 @@ if __name__ == "__main__":
 
     model3 = Model3(
         model_name="Model_3",
+        model=model,
         layers_structure=layers_structure, 
         input_size=(3, 32, 32), 
         train_loader=train_loader, 

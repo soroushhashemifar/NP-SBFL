@@ -20,7 +20,6 @@ from localization_Model_3_main import Model3
 class Verification:
 
     def __init__(self, deepcp, test_loader, time_budget, data_sample_preprocess_fn, decision_birch_pickle_path):
-
         self.deepcp = deepcp
         self.test_loader = test_loader
         self.time_budget = time_budget
@@ -137,17 +136,17 @@ class Verification:
             faulty_cdps = list(map(lambda item: item[0], scores))
 
             num_corrects, num_total_samples_fhr = self.calculate_FHR(faulty_cdps)
-            rate = num_corrects / num_total_samples_fhr if num_total_samples_fhr != 0 else 0
-            print(f"FHR: {num_corrects} {num_total_samples_fhr} {rate}")
+            fhr_rate = num_corrects / num_total_samples_fhr if num_total_samples_fhr != 0 else 0
+            print(f"FHR: {num_corrects} {num_total_samples_fhr} {fhr_rate}")
             
             num_failures, num_total_samples_hfr = self.calculate_HFR(faulty_cdps)
-            rate = num_failures / num_total_samples_hfr if num_total_samples_hfr != 0 else 0
-            print(f"HFR: {num_failures} {num_total_samples_hfr} {rate}")
+            hfr_rate = num_failures / num_total_samples_hfr if num_total_samples_hfr != 0 else 0
+            print(f"HFR: {num_failures} {num_total_samples_hfr} {hfr_rate}")
 
-            with open(os.path.join("results", f"{self.deepcp.model_name}_{SFL_strategy}_verif_ajshgashgowog.txt"), "a") as file:
+            with open(os.path.join("results", f"{self.deepcp.model_name}_{SFL_strategy}_verif.txt"), "a") as file:
                 file.write(f"THRESHOLD: {threshold}\n")
-                file.write(f"FHR: {num_corrects} {num_total_samples_fhr} {rate}\n")
-                file.write(f"HFR: {num_failures} {num_total_samples_hfr} {rate}\n")
+                file.write(f"FHR: {num_corrects} {num_total_samples_fhr} {fhr_rate}\n")
+                file.write(f"HFR: {num_failures} {num_total_samples_hfr} {hfr_rate}\n")
 
     def run(self):
         self.verify("tarantula")
@@ -167,7 +166,7 @@ def verify_main1():
         batch_size=1, shuffle=True)
 
     model = Net1()
-    model.load_state_dict(torch.load("models/mymodel_1.pth", map_location="cpu"))
+    model.load_state_dict(torch.load("models/Model_1.pth", map_location="cpu"))
     model = model.to("cpu")
     model.eval()
 
@@ -207,7 +206,7 @@ def verify_main2():
         batch_size=1, shuffle=True)
 
     model = Net2()
-    model.load_state_dict(torch.load("models/mymodel_2.pth", map_location="cpu"))
+    model.load_state_dict(torch.load("models/Model_2.pth", map_location="cpu"))
     model = model.to("cpu")
     model.eval()
 
@@ -238,7 +237,7 @@ def verify_main2():
     verification.run()
 
 def verify_main3():
-    ALPHA = 0.99
+    ALPHA = 0.9
     lrp_src.lrp_layers.top_k_percent = ALPHA
 
     test_loader = torch.utils.data.DataLoader(
@@ -249,7 +248,7 @@ def verify_main3():
         batch_size=1, shuffle=True)
 
     model = Net3()
-    model.load_state_dict(torch.load("models/mymodel_3.pth", map_location="cpu"))
+    model.load_state_dict(torch.load("models/Model_3.pth", map_location="cpu"))
     model = model.to("cpu")
     model.eval()
 
@@ -282,6 +281,6 @@ def verify_main3():
     verification.run()
 
 if __name__ == "__main__":
-    verify_main1()
-    verify_main2()
+    # verify_main1()
+    # verify_main2()
     verify_main3()

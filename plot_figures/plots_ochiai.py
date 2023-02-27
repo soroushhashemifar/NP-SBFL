@@ -22,18 +22,18 @@ def get_data(filename):
 
         i += 1
 
-    data = np.array(data)[1:]
+    data = np.array(data)
 
     return data
 
 fig, ax = plt.subplots(1, 3, figsize=(16, 5))
 fig.tight_layout(pad=5.0)
 
-results_ochiai = get_data("results_ochiai.txt")
-harmonic_mean = 2/(1/results_ochiai[:, 1] + 1/results_ochiai[:, 2])
+results_ochiai = get_data("../results/Model_1_ochiai_verif.txt")
+harmonic_mean = 2/(1/(results_ochiai[:, 1]+1e-8) + 1/(results_ochiai[:, 2]+1e-8))
 max_idx = np.argmax(harmonic_mean)
 
-print("mnist", results_ochiai[max_idx], harmonic_mean[max_idx])
+print("Model 1", results_ochiai[max_idx], harmonic_mean[max_idx])
 
 ax[0].plot(results_ochiai[:, 0], results_ochiai[:, 1], label="FHR")
 ax[0].plot(results_ochiai[:, 0], results_ochiai[:, 2], label="HFR")
@@ -42,32 +42,30 @@ ax[0].set_xlabel("Threshold")
 ax[0].set_ylabel("Rate")
 ax[0].legend()
 
-results2_ochiai = get_data("results2_ochiai.txt")
-harmonic_mean = 2/(1/results2_ochiai[:, 1] + 1/results2_ochiai[:, 2])
+results2_ochiai = get_data("../results/Model_2_ochiai_verif.txt")
+harmonic_mean = 2/(1/(results2_ochiai[:, 1]+1e-8) + 1/(results2_ochiai[:, 2]+1e-8))
 max_idx = np.argmax(harmonic_mean)
 
-print("mnist2", results2_ochiai[max_idx], harmonic_mean[max_idx])
+print("Model 2", results2_ochiai[max_idx], harmonic_mean[max_idx])
 
 ax[1].plot(results2_ochiai[:, 0], results2_ochiai[:, 1], label="FHR")
 ax[1].plot(results2_ochiai[:, 0], results2_ochiai[:, 2], label="HFR")
-harmonic_mean = 2/(1/results2_ochiai[:, 1] + 1/results2_ochiai[:, 2])
 ax[1].plot(results2_ochiai[:, 0], harmonic_mean, label="Harmonic mean")
 ax[1].set_xlabel("Threshold")
 ax[1].set_ylabel("Rate")
 ax[1].legend()
 
-results_cifar_ochiai = get_data("results_cifar_ochiai.txt")
-harmonic_mean = 2/(1/results_cifar_ochiai[:, 1] + 1/results_cifar_ochiai[:, 2])
+results_cifar_ochiai = get_data("../results/Model_3_ochiai_verif.txt")
+harmonic_mean = 2/(1/(results_cifar_ochiai[:, 1]+1e-8) + 1/(results_cifar_ochiai[:, 2]+1e-8))
 max_idx = np.argmax(harmonic_mean)
 
-print("cifar", results_cifar_ochiai[max_idx], harmonic_mean[max_idx])
+print("Model 3", results_cifar_ochiai[max_idx], harmonic_mean[max_idx])
 
 ax[2].plot(results_cifar_ochiai[:, 0], results_cifar_ochiai[:, 1], label="FHR")
 ax[2].plot(results_cifar_ochiai[:, 0], results_cifar_ochiai[:, 2], label="HFR")
-harmonic_mean = 2/(1/results_cifar_ochiai[:, 1] + 1/results_cifar_ochiai[:, 2])
 ax[2].plot(results_cifar_ochiai[:, 0], harmonic_mean, label="Harmonic mean")
 ax[2].set_xlabel("Threshold")
 ax[2].set_ylabel("Rate")
 ax[2].legend()
 
-plt.savefig('ochiai_plots.png')
+plt.savefig('figures/ochiai_plots.png')

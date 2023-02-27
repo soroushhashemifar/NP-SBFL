@@ -33,7 +33,7 @@ if __name__ == "__main__":
         batch_size=1, shuffle=True)
 
     model = Net()
-    model.load_state_dict(torch.load("models/mymodel_1.pth", map_location="cpu"))
+    model.load_state_dict(torch.load("models/Model_1.pth", map_location="cpu"))
     model = model.to("cpu")
     model.eval()
 

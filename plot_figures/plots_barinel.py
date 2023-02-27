@@ -22,18 +22,18 @@ def get_data(filename):
 
         i += 1
 
-    data = np.array(data)[1:]
+    data = np.array(data)
 
     return data
 
 fig, ax = plt.subplots(1, 3, figsize=(16, 5))
 fig.tight_layout(pad=5.0)
 
-results_barinel = get_data("results_barinel.txt")
-harmonic_mean = 2/(1/results_barinel[:, 1] + 1/results_barinel[:, 2])
+results_barinel = get_data("../results/Model_1_barinel_verif.txt")
+harmonic_mean = 2/(1/(results_barinel[:, 1]+1e-8) + 1/(results_barinel[:, 2]+1e-8))
 max_idx = np.argmax(harmonic_mean)
 
-print("mnist", results_barinel[max_idx], harmonic_mean[max_idx])
+print("Model 1", results_barinel[max_idx], harmonic_mean[max_idx])
 
 ax[0].plot(results_barinel[:, 0], results_barinel[:, 1], label="FHR")
 ax[0].plot(results_barinel[:, 0], results_barinel[:, 2], label="HFR")
@@ -42,11 +42,11 @@ ax[0].set_xlabel("Threshold")
 ax[0].set_ylabel("Rate")
 ax[0].legend()
 
-results2_barinel = get_data("results2_barinel.txt")
-harmonic_mean = 2/(1/results2_barinel[:, 1] + 1/results2_barinel[:, 2])
+results2_barinel = get_data("../results/Model_2_barinel_verif.txt")
+harmonic_mean = 2/(1/(results2_barinel[:, 1]+1e-8) + 1/(results2_barinel[:, 2]+1e-8))
 max_idx = np.argmax(harmonic_mean)
 
-print("mnist2", results2_barinel[max_idx], harmonic_mean[max_idx])
+print("Model 2", results2_barinel[max_idx], harmonic_mean[max_idx])
 
 ax[1].plot(results2_barinel[:, 0], results2_barinel[:, 1], label="FHR")
 ax[1].plot(results2_barinel[:, 0], results2_barinel[:, 2], label="HFR")
@@ -55,11 +55,11 @@ ax[1].set_xlabel("Threshold")
 ax[1].set_ylabel("Rate")
 ax[1].legend()
 
-results_cifar_barinel = get_data("results_cifar_barinel.txt")
-harmonic_mean = 2/(1/results_cifar_barinel[:, 1] + 1/results_cifar_barinel[:, 2])
+results_cifar_barinel = get_data("../results/Model_3_barinel_verif.txt")
+harmonic_mean = 2/(1/(results_cifar_barinel[:, 1]+1e-8) + 1/(results_cifar_barinel[:, 2]+1e-8))
 max_idx = np.argmax(harmonic_mean)
 
-print("cifar", results_cifar_barinel[max_idx], harmonic_mean[max_idx])
+print("Model 3", results_cifar_barinel[max_idx], harmonic_mean[max_idx])
 
 ax[2].plot(results_cifar_barinel[:, 0], results_cifar_barinel[:, 1], label="FHR")
 ax[2].plot(results_cifar_barinel[:, 0], results_cifar_barinel[:, 2], label="HFR")
@@ -68,4 +68,4 @@ ax[2].set_xlabel("Threshold")
 ax[2].set_ylabel("Rate")
 ax[2].legend()
 
-plt.savefig('barinel_plots.png')
+plt.savefig('figures/barinel_plots.png')

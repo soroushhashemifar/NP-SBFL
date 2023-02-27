@@ -161,6 +161,8 @@ class DeepCP:
         return decision_graph, decision_birch
 
     def calculate_acdp_hit_spectrums(self, decision_graph, decision_birch):
+        print("Calculating hit spectrums")
+
         cdp_spectrums = {}
         for key in decision_graph.keys():
             cdp_spectrums[key] = {"A_P": 0, "I_P": 0, "A_F": 0, "I_F": 0}
@@ -208,17 +210,17 @@ class DeepCP:
             if mean_jacc_sim_structural >= self.min_match and mean_jacc_sim_activational >= self.min_match:
                 if predicted_class == target.item():
                     cdp_spectrums[(predicted_class, predicted_cluster)]["A_P"] = cdp_spectrums[(predicted_class, predicted_cluster)]["A_P"] + 1
-                    # increase I_P for other clusters
-                    for class_index in decision_birch.keys():
-                        for cluster_index in range(decision_birch[class_index]["clustering"].n_clusters):
-                            if (class_index, cluster_index) != (predicted_class, predicted_cluster):
-                                cdp_spectrums[(class_index, cluster_index)]["I_P"] = cdp_spectrums[(class_index, cluster_index)]["I_P"] + 1
+
+                    # increase I_P for other clusters inside that class
+                    for cluster_index in range(decision_birch[predicted_class]["clustering"].n_clusters):
+                        if cluster_index != predicted_cluster:
+                            cdp_spectrums[(predicted_class, cluster_index)]["I_P"] = cdp_spectrums[(predicted_class, cluster_index)]["I_P"] + 1
                 else:
                     cdp_spectrums[(predicted_class, predicted_cluster)]["A_F"] = cdp_spectrums[(predicted_class, predicted_cluster)]["A_F"] + 1
+
                     # increase I_F for corresponding cluster in target class
-                    clusters_of_target_class = list(range(decision_birch[target.item()]["clustering"].n_clusters))
-                    for cluster_index in clusters_of_target_class:
-                        cdp_spectrums[(target.item(), cluster_index)]["I_F"] = cdp_spectrums[(target.item(), cluster_index)]["I_F"] + 1
+                    predicted_cluster = decision_birch[target.item()].predict(cdp_representation[None, ...])[0]
+                    cdp_spectrums[(target.item(), predicted_cluster)]["I_F"] = cdp_spectrums[(target.item(), predicted_cluster)]["I_F"] + 1
 
         return cdp_spectrums
 
@@ -242,13 +244,19 @@ class DeepCP:
         if not os.path.isdir(self.path_to_save_pickles):
             os.makedirs(self.path_to_save_pickles)
 
-        class_separated_samples = self.generate_class_separated_cdps()
-        decision_graph, decision_birch = self.generate_abstract_cdps(class_separated_samples)
+        if not os.path.isfile(os.path.join(self.path_to_save_pickles, f"{self.model_name}_class_separated_samples.pickle")):
+            class_separated_samples = self.generate_class_separated_cdps()
+            decision_graph, decision_birch = self.generate_abstract_cdps(class_separated_samples)
 
-        with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_class_separated_samples.pickle"), 'wb') as handle1, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_graph.pickle"), 'wb') as handle2, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_birch.pickle"), 'wb') as handle3:
-            pickle.dump(class_separated_samples, handle1, protocol=pickle.HIGHEST_PROTOCOL)
-            pickle.dump(decision_graph, handle2, protocol=pickle.HIGHEST_PROTOCOL)
-            pickle.dump(decision_birch, handle3, protocol=pickle.HIGHEST_PROTOCOL)                
+            with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_class_separated_samples.pickle"), 'wb') as handle1, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_graph.pickle"), 'wb') as handle2, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_birch.pickle"), 'wb') as handle3:
+                pickle.dump(class_separated_samples, handle1, protocol=pickle.HIGHEST_PROTOCOL)
+                pickle.dump(decision_graph, handle2, protocol=pickle.HIGHEST_PROTOCOL)
+                pickle.dump(decision_birch, handle3, protocol=pickle.HIGHEST_PROTOCOL)                
+        else:
+            print("Loading previous files")
+            with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_graph.pickle"), 'rb') as handle1, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_birch.pickle"), 'rb') as handle2:
+                decision_graph = pickle.load(handle1)
+                decision_birch = pickle.load(handle2)  
 
         cdp_spectrums = self.calculate_acdp_hit_spectrums(decision_graph, decision_birch)
 

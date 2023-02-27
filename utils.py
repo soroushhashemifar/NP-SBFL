@@ -34,7 +34,7 @@ def train(epoch, model, train_loader, optimizer, parameters):
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.data))
 
-def test(model, test_loader, parameters, scheduler=None):
+def test(model, test_loader, parameters, scheduler=None, log=True):
     model.eval()
     test_loss = 0
     correct = 0
@@ -48,9 +48,11 @@ def test(model, test_loader, parameters, scheduler=None):
         correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
 
     test_loss /= len(test_loader.dataset)
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-        test_loss, correct, len(test_loader.dataset),
-        100. * correct / len(test_loader.dataset)))
+
+    if log:
+        print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
+            test_loss, correct, len(test_loader.dataset),
+            100. * correct / len(test_loader.dataset)))
 
     if scheduler is not None:
         scheduler.step(test_loss)

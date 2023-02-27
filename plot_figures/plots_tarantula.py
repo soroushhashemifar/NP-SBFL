@@ -22,18 +22,18 @@ def get_data(filename):
 
         i += 1
 
-    data = np.array(data)[1:]
+    data = np.array(data)
 
     return data
 
 fig, ax = plt.subplots(1, 3, figsize=(16, 5))
 fig.tight_layout(pad=5.0)
 
-results_tarantula = get_data("results_tarantula.txt")
-harmonic_mean = 2/(1/results_tarantula[:, 1] + 1/results_tarantula[:, 2])
+results_tarantula = get_data("../results/Model_1_tarantula_verif.txt")
+harmonic_mean = 2/(1/(results_tarantula[:, 1]+1e-8) + 1/(results_tarantula[:, 2]+1e-8))
 max_idx = np.argmax(harmonic_mean)
 
-print("mnist", results_tarantula[max_idx], harmonic_mean[max_idx])
+print("Model 1", results_tarantula[max_idx], harmonic_mean[max_idx])
 
 ax[0].plot(results_tarantula[:, 0], results_tarantula[:, 1], label="FHR")
 ax[0].plot(results_tarantula[:, 0], results_tarantula[:, 2], label="HFR")
@@ -42,11 +42,11 @@ ax[0].set_xlabel("Threshold")
 ax[0].set_ylabel("Rate")
 ax[0].legend()
 
-results2_tarantula = get_data("results2_tarantula.txt")
-harmonic_mean = 2/(1/results2_tarantula[:, 1] + 1/results2_tarantula[:, 2])
+results2_tarantula = get_data("../results/Model_2_tarantula_verif.txt")
+harmonic_mean = 2/(1/(results2_tarantula[:, 1]+1e-8) + 1/(results2_tarantula[:, 2]+1e-8))
 max_idx = np.argmax(harmonic_mean)
 
-print("mnist2", results2_tarantula[max_idx], harmonic_mean[max_idx])
+print("Model 2", results2_tarantula[max_idx], harmonic_mean[max_idx])
 
 ax[1].plot(results2_tarantula[:, 0], results2_tarantula[:, 1], label="FHR")
 ax[1].plot(results2_tarantula[:, 0], results2_tarantula[:, 2], label="HFR")
@@ -55,11 +55,11 @@ ax[1].set_xlabel("Threshold")
 ax[1].set_ylabel("Rate")
 ax[1].legend()
 
-results_cifar_tarantula = get_data("results_cifar_tarantula.txt")
-harmonic_mean = 2/(1/results_cifar_tarantula[:, 1] + 1/results_cifar_tarantula[:, 2])
+results_cifar_tarantula = get_data("../results/Model_3_tarantula_verif.txt")
+harmonic_mean = 2/(1/(results_cifar_tarantula[:, 1]+1e-8) + 1/(results_cifar_tarantula[:, 2]+1e-8))
 max_idx = np.argmax(harmonic_mean)
 
-print("cifar", results_cifar_tarantula[max_idx], harmonic_mean[max_idx])
+print("Model 3", results_cifar_tarantula[max_idx], harmonic_mean[max_idx])
 
 ax[2].plot(results_cifar_tarantula[:, 0], results_cifar_tarantula[:, 1], label="FHR")
 ax[2].plot(results_cifar_tarantula[:, 0], results_cifar_tarantula[:, 2], label="HFR")
@@ -68,4 +68,4 @@ ax[2].set_xlabel("Threshold")
 ax[2].set_ylabel("Rate")
 ax[2].legend()
 
-plt.savefig('tarantula_plots.png')
+plt.savefig('figures/tarantula_plots.png')
