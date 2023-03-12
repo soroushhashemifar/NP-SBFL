@@ -1,6 +1,7 @@
 import os
 import pickle
 import random
+import time
 
 import numpy as np
 import torch
@@ -65,6 +66,7 @@ class DeepCP:
 
         predicted_class = torch.max(relevancy[-1], dim=1).indices.item()
 
+        # print(critical_neurons_layers_test)
         cdp_representation = torch.zeros(sum(self.layer_shapes))
         for i in range(len(critical_neurons_layers_test)):
             if i == 0:
@@ -119,7 +121,7 @@ class DeepCP:
 
             cdp_representations = []
             sample_activations = []
-            for cdp_reps, sample_activs in class_separated_samples[c]: #[:3000]: # due to out of memory!
+            for cdp_reps, sample_activs in class_separated_samples[c]:
                 with open(cdp_reps, 'rb') as handle:
                     representation = pickle.load(handle)
 
@@ -149,7 +151,12 @@ class DeepCP:
                         end_index = sum(self.layer_shapes[:i+1])
 
                     abstract_critical_neurons = np.where(neuron_criticality_weights[start_index:end_index] >= self.beta)[0]
+                    if abstract_critical_neurons.shape[0] == 0:
+                        abstract_critical_neurons = np.array([np.argmax(neuron_criticality_weights[start_index:end_index])])
+
                     s_hat_beta.append(abstract_critical_neurons)
+
+                print("abstract CDP for cluster", (c, cluster_index), s_hat_beta)
 
                 cluster_samples_activations = [sample_activations[i] for i in np.where(cluster_labels == cluster_index)[0]]
                 activations_filename = os.path.join(self.path_to_save_activations, f"cluster_samples_activations_{c}_{cluster_index}.pickle")
@@ -178,49 +185,52 @@ class DeepCP:
                 continue
 
             predicted_cluster = decision_birch[predicted_class].predict(cdp_representation[None, ...])[0]
-            critical_neurons_layers_abstract_cdp = decision_graph[(predicted_class, predicted_cluster)]
+            # critical_neurons_layers_abstract_cdp = decision_graph[(predicted_class, predicted_cluster)]
 
-            jacc_sims_of_cdps = [jaccard_sim(s_i.tolist(), s_hat_i.tolist()) for s_i, s_hat_i in zip(critical_neurons_layers_test, critical_neurons_layers_abstract_cdp)]
-            mean_jacc_sim_structural = sum(jacc_sims_of_cdps) / len(jacc_sims_of_cdps)
+            # jacc_sims_of_cdps = [jaccard_sim(s_i.tolist(), s_hat_i.tolist()) for s_i, s_hat_i in zip(critical_neurons_layers_test, critical_neurons_layers_abstract_cdp)]
+            # mean_jacc_sim_structural = sum(jacc_sims_of_cdps) / len(jacc_sims_of_cdps)
 
-            with open(os.path.join(self.path_to_save_activations, f"cluster_samples_activations_{predicted_class}_{predicted_cluster}.pickle"), 'rb') as handle:
-                cluster_samples_activations = pickle.load(handle)
+            # with open(os.path.join(self.path_to_save_activations, f"cluster_samples_activations_{predicted_class}_{predicted_cluster}.pickle"), 'rb') as handle:
+            #     cluster_samples_activations = pickle.load(handle)
 
-            # TODO: sample activations w.r.t a criteria
-            subset_cluster_samples_activations = random.sample(cluster_samples_activations, min(10, len(cluster_samples_activations)))
+            # # TODO: sample activations w.r.t a criteria
+            # subset_cluster_samples_activations = random.sample(cluster_samples_activations, min(10, len(cluster_samples_activations)))
 
-            similarities = []
-            for sample_activation_path in subset_cluster_samples_activations:
-                with open(sample_activation_path, "rb") as handle:
-                    sample_activation = pickle.load(handle)
+            # similarities = []
+            # for sample_activation_path in subset_cluster_samples_activations:
+            #     with open(sample_activation_path, "rb") as handle:
+            #         sample_activation = pickle.load(handle)
 
-                similarities_ = []
-                for sample_layer_actv, layer_critical_neurons, test_layer_actv in zip(sample_activation, critical_neurons_layers_abstract_cdp, activations):
-                    sample_layer_state = np.where(sample_layer_actv.detach().cpu() > 0., 1, 0)[0]
-                    test_layer_state = np.where(test_layer_actv.detach().cpu() > 0., 1, 0)[0]
+            #     similarities_ = []
+            #     for sample_layer_actv, layer_critical_neurons, test_layer_actv in zip(sample_activation, critical_neurons_layers_abstract_cdp, activations):
+            #         sample_layer_state = np.where(sample_layer_actv.detach().cpu() > 0., 1, 0)[0]
+            #         test_layer_state = np.where(test_layer_actv.detach().cpu() > 0., 1, 0)[0]
 
-                    similarity = 1 - hamming(sample_layer_state[layer_critical_neurons].tolist(), test_layer_state[layer_critical_neurons].tolist())
-                    similarities_.append(similarity)
+            #         similarity = 1 - hamming(sample_layer_state[layer_critical_neurons].tolist(), test_layer_state[layer_critical_neurons].tolist())
+            #         similarities_.append(similarity)
 
-                temp_ = sum(similarities_) / len(similarities_)
-                similarities.append(temp_)
+            #     temp_ = sum(similarities_) / len(similarities_)
+            #     similarities.append(temp_)
 
-            mean_jacc_sim_activational = sum(similarities) / len(similarities) if len(similarities) != 0 else 0.
+            # mean_jacc_sim_activational = sum(similarities) / len(similarities) if len(similarities) != 0 else 0.
 
-            if mean_jacc_sim_structural >= self.min_match and mean_jacc_sim_activational >= self.min_match:
-                if predicted_class == target.item():
-                    cdp_spectrums[(predicted_class, predicted_cluster)]["A_P"] = cdp_spectrums[(predicted_class, predicted_cluster)]["A_P"] + 1
+            # if mean_jacc_sim_structural >= self.min_match and mean_jacc_sim_activational >= self.min_match:
+            if predicted_class == target.item():
+                cdp_spectrums[(predicted_class, predicted_cluster)]["A_P"] = cdp_spectrums[(predicted_class, predicted_cluster)]["A_P"] + 1
 
-                    # increase I_P for other clusters inside that class
-                    for cluster_index in range(decision_birch[predicted_class]["clustering"].n_clusters):
-                        if cluster_index != predicted_cluster:
-                            cdp_spectrums[(predicted_class, cluster_index)]["I_P"] = cdp_spectrums[(predicted_class, cluster_index)]["I_P"] + 1
-                else:
-                    cdp_spectrums[(predicted_class, predicted_cluster)]["A_F"] = cdp_spectrums[(predicted_class, predicted_cluster)]["A_F"] + 1
+                # increase I_P for other clusters inside that class
+                # for cluster_index in range(decision_birch[predicted_class]["clustering"].n_clusters):
+                #     if cluster_index != predicted_cluster:
+                #         cdp_spectrums[(predicted_class, cluster_index)]["I_P"] = cdp_spectrums[(predicted_class, cluster_index)]["I_P"] + 1
+                for class_index, cluster_index in cdp_spectrums.keys():
+                    if (class_index, cluster_index) != (predicted_class, predicted_cluster):
+                        cdp_spectrums[(class_index, cluster_index)]["I_P"] = cdp_spectrums[(class_index, cluster_index)]["I_P"] + 1
+            else:
+                cdp_spectrums[(predicted_class, predicted_cluster)]["A_F"] = cdp_spectrums[(predicted_class, predicted_cluster)]["A_F"] + 1
 
-                    # increase I_F for corresponding cluster in target class
-                    predicted_cluster = decision_birch[target.item()].predict(cdp_representation[None, ...])[0]
-                    cdp_spectrums[(target.item(), predicted_cluster)]["I_F"] = cdp_spectrums[(target.item(), predicted_cluster)]["I_F"] + 1
+                # increase I_F for corresponding cluster in target class
+                predicted_cluster = decision_birch[target.item()].predict(cdp_representation[None, ...])[0]
+                cdp_spectrums[(target.item(), predicted_cluster)]["I_F"] = cdp_spectrums[(target.item(), predicted_cluster)]["I_F"] + 1
 
         return cdp_spectrums
 
@@ -246,22 +256,35 @@ class DeepCP:
 
         if not os.path.isfile(os.path.join(self.path_to_save_pickles, f"{self.model_name}_class_separated_samples.pickle")):
             class_separated_samples = self.generate_class_separated_cdps()
+
+            with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_class_separated_samples.pickle"), 'wb') as handle1: 
+                pickle.dump(class_separated_samples, handle1, protocol=pickle.HIGHEST_PROTOCOL)
+        
+            time.sleep(5)
+        else:
+            print("Loading previous files for class_separated_samples")
+            with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_class_separated_samples.pickle"), 'rb') as handle1:
+                class_separated_samples = pickle.load(handle1)
+
+        if not os.path.isfile(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_graph.pickle")):
             decision_graph, decision_birch = self.generate_abstract_cdps(class_separated_samples)
 
-            with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_class_separated_samples.pickle"), 'wb') as handle1, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_graph.pickle"), 'wb') as handle2, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_birch.pickle"), 'wb') as handle3:
-                pickle.dump(class_separated_samples, handle1, protocol=pickle.HIGHEST_PROTOCOL)
-                pickle.dump(decision_graph, handle2, protocol=pickle.HIGHEST_PROTOCOL)
-                pickle.dump(decision_birch, handle3, protocol=pickle.HIGHEST_PROTOCOL)                
+            with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_graph.pickle"), 'wb') as handle1, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_birch.pickle"), 'wb') as handle2:
+                pickle.dump(decision_graph, handle1, protocol=pickle.HIGHEST_PROTOCOL)
+                pickle.dump(decision_birch, handle2, protocol=pickle.HIGHEST_PROTOCOL)
+
+            time.sleep(5)
         else:
-            print("Loading previous files")
+            print("Loading previous files for decision_graph and decision_birch")
             with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_graph.pickle"), 'rb') as handle1, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_birch.pickle"), 'rb') as handle2:
                 decision_graph = pickle.load(handle1)
-                decision_birch = pickle.load(handle2)  
+                decision_birch = pickle.load(handle2)
 
         cdp_spectrums = self.calculate_acdp_hit_spectrums(decision_graph, decision_birch)
 
         with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_cdp_spectrums.pickle"), 'wb') as handle:
             pickle.dump(cdp_spectrums, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            time.sleep(5)
 
         if not os.path.isdir("results"):
             os.makedirs("results")

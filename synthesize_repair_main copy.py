@@ -13,11 +13,12 @@ import torch.optim as optim
 from models.train_model_3 import Net as Net3
 from localization_Model_3_main import Model3
 import lrp_src
+from torch.autograd import Variable
 
 
 class Synthesize:
 
-    def __init__(self, deepcp, model, test_loader, metric_thresholds, pixel_mean, pixel_std, step_size=5, distance=0.1):
+    def __init__(self, deepcp, model, test_loader, metric_thresholds, pixel_mean, pixel_std, data_sample_preprocess_fn, step_size=5, distance=0.1):
         self.step_size = step_size
         self.distance = distance
 
@@ -25,6 +26,7 @@ class Synthesize:
         self.model = model
         self.test_loader = test_loader
         self.metric_thresholds = metric_thresholds
+        self.data_sample_preprocess_fn = data_sample_preprocess_fn
 
         self.pixel_mean = torch.tensor(list(pixel_mean)).unsqueeze(0).unsqueeze(2).unsqueeze(3)
         self.pixel_std = torch.tensor(list(pixel_std)).unsqueeze(0).unsqueeze(2).unsqueeze(3)
@@ -78,9 +80,9 @@ class Synthesize:
         fpl_detected_neurons = [(layer_index, neuron_index) for faulty_cdp in faulty_cdps for layer_index in range(len(self.decision_graph[faulty_cdp])-1) for neuron_index in self.decision_graph[faulty_cdp][layer_index]]
         fpl_detected_neurons = set(fpl_detected_neurons)
 
-        return fpl_detected_neurons
+        return fpl_detected_neurons, faulty_cdps
 
-    def synthesize_testset(self, fpl_detected_neurons):
+    def synthesize_testset(self, fpl_detected_neurons, faulty_cdps):
         features = []
         def get_features():
             def hook(model, input, output):
@@ -92,57 +94,64 @@ class Synthesize:
             if layer.__class__.__name__ in ["Conv2d", "MaxPool2d", "Linear"]:
                 layer.register_forward_hook(get_features())
 
-        # data_sample_preprocess_fn = lambda item: item
-
         synthesized_dataset = []
         for data, labels in tqdm.tqdm(self.test_loader):
             features = []
 
-            data_ = self.transforms(data)
-            inputs = torch.autograd.Variable(data_, requires_grad=True)
-            logits = self.model(inputs)
-            logits = torch.softmax(logits, 1)
-            outputs = torch.argmax(logits, 1)
+            data = Variable(data)
 
-            # predicted_clusters = []
-            # for sample_index in range(data.shape[0]):
-            #     class_specific_birch = decision_birch[outputs[sample_index].item()]
-            #     cdp_representation, _, _, _ = deepcp3.generate_cdp_representation(data_sample_preprocess_fn(data[sample_index][None, ...]))
-            #     predicted_cluster = class_specific_birch.predict(cdp_representation[None, ...])[0]
-            #     predicted_clusters.append(predicted_cluster)
+            cdp_representation, critical_neurons_layers_test, predicted_class, _ = self.deepcp.generate_cdp_representation(self.data_sample_preprocess_fn(data))
+            if (cdp_representation is None and critical_neurons_layers_test is None and predicted_class is None) or predicted_class not in self.decision_birch.keys():
+                continue
+            
+            predicted_cluster = self.decision_birch[predicted_class].predict(cdp_representation[None, ...])[0]
+            if (predicted_class, predicted_cluster) in faulty_cdps:
 
-            # predicted_clusters = torch.tensor(predicted_clusters)
-            # cdp_tuples = torch.concat([outputs[..., None], predicted_clusters[..., None]], dim=1)
-            # cdp_mask = torch.tensor([tuple(cdp_tuple.numpy().tolist()) in faulty_cdps for cdp_tuple in cdp_tuples])
-            # mask = torch.logical_and(outputs == labels, cdp_mask)
+                # data_ = self.transforms(data)
+                inputs = torch.autograd.Variable(data, requires_grad=True)
+                logits = self.model(inputs)
+                logits = torch.softmax(logits, 1)
+                outputs = torch.argmax(logits, 1)
 
-            mask = outputs == labels
+                # predicted_clusters = []
+                # for sample_index in range(data.shape[0]):
+                #     class_specific_birch = decision_birch[outputs[sample_index].item()]
+                #     cdp_representation, _, _, _ = deepcp3.generate_cdp_representation(data_sample_preprocess_fn(data[sample_index][None, ...]))
+                #     predicted_cluster = class_specific_birch.predict(cdp_representation[None, ...])[0]
+                #     predicted_clusters.append(predicted_cluster)
 
-            gradients = []
-            for layer_idx, sn_index in fpl_detected_neurons:
-                features_ = features[layer_idx][:, [sn_index]]
-                gradients_ = torch.autograd.grad(outputs=features_, inputs=inputs, grad_outputs=torch.ones(features_.size()).to("cpu"), retain_graph=True)[0]
-                gradients_ = gradients_[mask]
-                gradients.append(gradients_)
+                # predicted_clusters = torch.tensor(predicted_clusters)
+                # cdp_tuples = torch.concat([outputs[..., None], predicted_clusters[..., None]], dim=1)
+                # cdp_mask = torch.tensor([tuple(cdp_tuple.numpy().tolist()) in faulty_cdps for cdp_tuple in cdp_tuples])
+                # mask = torch.logical_and(outputs == labels, cdp_mask)
 
-            data = data[mask]
-            perturbed_data = data.clone()
-            perturbed_data = self.synthsize_image(data, perturbed_data, gradients)
-            perturbed_data = self.applyDomainConstraints(perturbed_data)
+                mask = outputs == labels
 
-            data = data.permute(0, 2, 3, 1).numpy()
-            perturbed_data = perturbed_data.permute(0, 2, 3, 1).numpy()
-            labels = labels[mask].numpy()
-            for datam, perturbed_datam, label in zip(data, perturbed_data, labels):
-                synthesized_dataset.append((datam, perturbed_datam, label))
+                gradients = []
+                for layer_idx, sn_index in fpl_detected_neurons:
+                    features_ = features[layer_idx][:, [sn_index]]
+                    gradients_ = torch.autograd.grad(outputs=features_, inputs=inputs, grad_outputs=torch.ones(features_.size()).to("cpu"), retain_graph=True)[0]
+                    gradients_ = gradients_[mask]
+                    gradients.append(gradients_)
+
+                data = data[mask]
+                perturbed_data = data.clone()
+                perturbed_data = self.synthsize_image(data, perturbed_data, gradients)
+                perturbed_data = self.applyDomainConstraints(perturbed_data)
+
+                data = data.permute(0, 2, 3, 1).numpy()
+                perturbed_data = perturbed_data.permute(0, 2, 3, 1).numpy()
+                labels = labels[mask].numpy()
+                for datam, perturbed_datam, label in zip(data, perturbed_data, labels):
+                    synthesized_dataset.append((datam, perturbed_datam, label))
 
         return synthesized_dataset
 
     def run(self):
         for SFL_strategy, metric_threshold in self.metric_thresholds:
             print(f"Synthesizing {SFL_strategy}")
-            suspicious_neurons = self.get_suspicious_neurons(SFL_strategy, metric_threshold)
-            synthesized_dataset = self.synthesize_testset(suspicious_neurons)
+            suspicious_neurons, faulty_cdps = self.get_suspicious_neurons(SFL_strategy, metric_threshold)
+            synthesized_dataset = self.synthesize_testset(suspicious_neurons, faulty_cdps)
             with open(f"./pickles/synthesized_dataset_{self.deepcp.model_name}_{SFL_strategy}.pickle", 'wb') as handle:
                 pickle.dump(synthesized_dataset, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -221,27 +230,29 @@ def repair_model_1():
                         transforms.ToTensor(),
                         transforms.Normalize((0.1307,), (0.3081,))
                     ])),
-        batch_size=128, shuffle=False)
+        batch_size=1, shuffle=False)
 
     metric_thresholds = [("tarantula", 0.99), ("ochiai", 0.26), ("barinel", 0.18)]
 
-    model_1_synthsizer = Synthesize(deepcp1, model, test_loader, metric_thresholds, (0.1307,), (0.3081,), step_size=50, distance=1.)
+    data_sample_preprocess_fn = lambda item: item.view(-1, 784)
+
+    model_1_synthsizer = Synthesize(deepcp1, model, test_loader, metric_thresholds, (0.1307,), (0.3081,), data_sample_preprocess_fn, step_size=20, distance=0.1)
     model_1_synthsizer.run()
 
-    parameters = {
-            "cuda": False,
-            "loss": "nll_loss",
-            "log_interval": 1000,
-            "learning_rate": 0.1,
-            "num_epochs": 20,
-        }
+    # parameters = {
+    #         "cuda": False,
+    #         "loss": "nll_loss",
+    #         "log_interval": 1000,
+    #         "learning_rate": 0.1,
+    #         "num_epochs": 20,
+    #     }
 
-    for SFL_strategy, _ in metric_thresholds:
-        model = Net1()
-        model.load_state_dict(torch.load("models/Model_1.pth", map_location="cpu"))
-        model = model.to("cpu")
-        repaired_model = repair_method(deepcp1, SFL_strategy, model, test_loader, parameters)
-        # torch.save(repaired_model.state_dict(), f"models/{deepcp1.model_name}_repaired_{SFL_strategy}.pth")
+    # for SFL_strategy, _ in metric_thresholds:
+    #     model = Net1()
+    #     model.load_state_dict(torch.load("models/Model_1.pth", map_location="cpu"))
+    #     model = model.to("cpu")
+    #     repaired_model = repair_method(deepcp1, SFL_strategy, model, test_loader, parameters)
+    #     torch.save(repaired_model.state_dict(), f"models/{deepcp1.model_name}_repaired_{SFL_strategy}.pth")
 
 def repair_model_2():
     print("Repair model 2 started")
@@ -284,7 +295,7 @@ def repair_model_2():
         ("ochiai", 0.05), ("barinel", 0.014)
         ]
 
-    model_2_synthsizer = Synthesize(deepcp2, model, test_loader, metric_thresholds, (0.1307,), (0.3081,), step_size=10, distance=0.3)
+    model_2_synthsizer = Synthesize(deepcp2, model, test_loader, metric_thresholds, (0.1307,), (0.3081,), step_size=1, distance=0.5)
     model_2_synthsizer.run()
 
     parameters = {
@@ -300,7 +311,7 @@ def repair_model_2():
         model.load_state_dict(torch.load("models/Model_2.pth", map_location="cpu"))
         model = model.to("cpu")
         repaired_model = repair_method(deepcp2, SFL_strategy, model, test_loader, parameters)
-    #     torch.save(repaired_model.state_dict(), f"models/{deepcp2.model_name}_repaired_{SFL_strategy}.pth")
+        torch.save(repaired_model.state_dict(), f"models/{deepcp2.model_name}_repaired_{SFL_strategy}.pth")
 
 def repair_model_3():
     print("Repair model 3 started")
@@ -342,7 +353,7 @@ def repair_model_3():
 
     metric_thresholds = [("tarantula", 0.90802413), ("ochiai", 0.37238748), ("barinel", 0.3964497)]
 
-    model_3_synthsizer = Synthesize(deepcp3, model, test_loader, metric_thresholds, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), step_size=1, distance=0.5)
+    model_3_synthsizer = Synthesize(deepcp3, model, test_loader, metric_thresholds, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), step_size=1, distance=0.1)
     model_3_synthsizer.run()
 
     parameters = {
@@ -358,9 +369,9 @@ def repair_model_3():
         model.load_state_dict(torch.load("models/Model_3.pth", map_location="cpu"))
         model = model.to("cpu")
         repaired_model = repair_method(deepcp3, SFL_strategy, model, test_loader, parameters)
-    #     torch.save(repaired_model.state_dict(), f"models/{deepcp3.model_name}_repaired_{SFL_strategy}.pth")
+        torch.save(repaired_model.state_dict(), f"models/{deepcp3.model_name}_repaired_{SFL_strategy}.pth")
 
 if __name__ == "__main__":
-    # repair_model_1()
+    repair_model_1()
     # repair_model_2()
-    repair_model_3()
+    # repair_model_3()

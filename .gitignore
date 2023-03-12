@@ -1,7 +1,8 @@
 __pycache__/
 .vscode/
-activations*/
+*activations/
 data/
-representations*/
+*representations/
 pickles/
 _config.py
+_*/

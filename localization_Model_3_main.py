@@ -21,9 +21,9 @@ class Model3(DeepCP):
 
 
 if __name__ == "__main__":
-    ALPHA = 0.9
+    ALPHA = 0.7
 
-    lrp_src.lrp_layers.top_k_percent = ALPHA
+    # lrp_src.lrp_layers.top_k_percent = 0.9
 
     train_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10('models/data', train=True, download=True,
@@ -64,10 +64,10 @@ if __name__ == "__main__":
         test_loader=test_loader,
         device="cpu",
         batch_size=128,
-        alpha=ALPHA, beta=0.7, min_match=0.8, 
-        PCA_n_components=[16, 32, 64, 128], 
-        Birch_thresholds=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        Birch_n_clusters=[2, 5, 7, 10],
+        alpha=ALPHA, beta=0.99, min_match=0.8, 
+        PCA_n_components=[8, 32], 
+        Birch_thresholds=[0.1, 0.5, 0.9],
+        Birch_n_clusters=[6, 10, 15],
     )
 
     model3.run()

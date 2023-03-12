@@ -145,10 +145,12 @@ def jaccard_sim(list1, list2):
     return float(intersection) / union
 
 def get_best_parameters(data, PCA_n_components, Birch_thresholds, Birch_n_clusters, batch_size):
+    # print("len(data)", len(data), data[0].shape)
     results = []
     for n_components in PCA_n_components:
         for threshold in Birch_thresholds:
             for n_clusters in Birch_n_clusters:
+                # print(n_components)
                 clustering = Pipeline([
                     ('dim_red', IncrementalPCA(n_components=n_components, batch_size=batch_size)), 
                     ('clustering', Birch(threshold=threshold, n_clusters=n_clusters))
@@ -174,4 +176,4 @@ def get_ochiai_score(path_spectrum):
     return path_spectrum['A_F'] / (math.sqrt(total_faileds * total_actives) + 0.0000001)
 
 def get_BARINEL_score(path_spectrum):
-    return 1 - path_spectrum["A_P"] / (path_spectrum["A_P"] + path_spectrum["A_F"] + 0.0000001)
+    return path_spectrum["A_P"] / (path_spectrum["A_P"] + path_spectrum["A_F"] + 0.0000001)

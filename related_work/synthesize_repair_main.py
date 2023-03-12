@@ -35,6 +35,11 @@ class Synthesize:
         with open(f"./pickles/{deepcp.model_name}_decision_birch.pickle", 'rb') as handle:
                 self.decision_birch = pickle.load(handle)
 
+        self.transforms = transforms.Compose([
+                        transforms.RandomHorizontalFlip(),
+                        transforms.RandomVerticalFlip(),
+                    ])
+
     def synthsize_image(self, data, perturbed_data, gradients):
         for i in range(data.shape[2]):
             for j in range(data.shape[3]):
@@ -93,7 +98,8 @@ class Synthesize:
         for data, labels in tqdm.tqdm(self.test_loader):
             features = []
 
-            inputs = torch.autograd.Variable(data, requires_grad=True)
+            data_ = self.transforms(data)
+            inputs = torch.autograd.Variable(data_, requires_grad=True)
             logits = self.model(inputs)
             logits = torch.softmax(logits, 1)
             outputs = torch.argmax(logits, 1)
@@ -143,8 +149,9 @@ class Synthesize:
 
 class SynthesizedDataset(torch.utils.data.Dataset):
 
-    def __init__(self, dataset):
+    def __init__(self, dataset, transforms=None):
         self.dataset = dataset
+        self.transforms = transforms
 
     def __len__(self):
         return len(self.dataset)
@@ -218,7 +225,7 @@ def repair_model_1():
 
     metric_thresholds = [("tarantula", 0.99), ("ochiai", 0.26), ("barinel", 0.18)]
 
-    model_1_synthsizer = Synthesize(deepcp1, model, test_loader, metric_thresholds, (0.1307,), (0.3081,), step_size=50, distance=0.3)
+    model_1_synthsizer = Synthesize(deepcp1, model, test_loader, metric_thresholds, (0.1307,), (0.3081,), step_size=20, distance=0.1)
     model_1_synthsizer.run()
 
     parameters = {
@@ -226,7 +233,7 @@ def repair_model_1():
             "loss": "nll_loss",
             "log_interval": 1000,
             "learning_rate": 0.1,
-            "num_epochs": 15,
+            "num_epochs": 20,
         }
 
     for SFL_strategy, _ in metric_thresholds:
@@ -272,9 +279,12 @@ def repair_model_2():
                     ])),
         batch_size=128, shuffle=False)
 
-    metric_thresholds = [("tarantula", 0.87), ("ochiai", 0.05), ("barinel", 0.014)]
+    metric_thresholds = [
+        ("tarantula", 0.87), 
+        ("ochiai", 0.05), ("barinel", 0.014)
+        ]
 
-    model_2_synthsizer = Synthesize(deepcp2, model, test_loader, metric_thresholds, (0.1307,), (0.3081,), step_size=20, distance=0.1)
+    model_2_synthsizer = Synthesize(deepcp2, model, test_loader, metric_thresholds, (0.1307,), (0.3081,), step_size=1, distance=0.5)
     model_2_synthsizer.run()
 
     parameters = {
@@ -282,7 +292,7 @@ def repair_model_2():
             "loss": "nll_loss",
             "log_interval": 1000,
             "learning_rate": 0.1,
-            "num_epochs": 15,
+            "num_epochs": 20,
         }
 
     for SFL_strategy, _ in metric_thresholds:
@@ -330,17 +340,17 @@ def repair_model_3():
                     ])),
         batch_size=128, shuffle=False)
 
-    metric_thresholds = [("tarantula", 0.91), ("ochiai", 0.38), ("barinel", 0.38)]
+    metric_thresholds = [("tarantula", 0.90802413), ("ochiai", 0.37238748), ("barinel", 0.3964497)]
 
-    model_3_synthsizer = Synthesize(deepcp3, model, test_loader, metric_thresholds, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), step_size=1, distance=0.3)
+    model_3_synthsizer = Synthesize(deepcp3, model, test_loader, metric_thresholds, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5), step_size=1, distance=0.1)
     model_3_synthsizer.run()
 
     parameters = {
             "cuda": False,
             "loss": "cross_entropy",
             "log_interval": 1000,
-            "learning_rate": 0.1,
-            "num_epochs": 15,
+            "learning_rate": 0.01,
+            "num_epochs": 20,
         }
 
     for SFL_strategy, _ in metric_thresholds:

@@ -16,7 +16,7 @@ class Model2(DeepCP):
 
 
 if __name__ == "__main__":
-    ALPHA = 0.99
+    ALPHA = 0.999
 
     lrp_src.lrp_layers.top_k_percent = ALPHA
 
@@ -48,7 +48,8 @@ if __name__ == "__main__":
     ]
 
     model2 = Model2(
-        model_name="Model_2",
+        model_name="Model_2_extra",
+        model=model,
         layers_structure=layers_structure, 
         input_size=(1, 28, 28), 
         train_loader=train_loader, 

@@ -64,6 +64,6 @@ def save_susp_distributions_plot(model_name, metric_thresholds, width):
 # metric_thresholds = [("tarantula", 0.87), ("ochiai", 0.05), ("barinel", 0.014)]
 # save_susp_distributions_plot("Model_2", metric_thresholds, width=0.30)
 
-layers_num_units = np.array([16, 16, 32, 32, 64, 64, 64, 64, 128, 64])
-metric_thresholds = [("tarantula", 0.90802413), ("ochiai", 0.37238748), ("barinel", 0.3964497)]
-save_susp_distributions_plot("Model_3", metric_thresholds, width=0.60)
+# layers_num_units = np.array([16, 16, 32, 32, 64, 64, 64, 64, 128, 64])
+# metric_thresholds = [("tarantula", 0.90802413), ("ochiai", 0.37238748), ("barinel", 0.3964497)]
+# save_susp_distributions_plot("Model_3", metric_thresholds, width=0.60)

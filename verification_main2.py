@@ -25,38 +25,8 @@ class Verification:
         self.time_budget = time_budget
         self.data_sample_preprocess_fn = data_sample_preprocess_fn
 
-        self.available_transformations = [
-            transforms.RandomRotation(120),
-            transforms.RandomCrop(self.deepcp.input_size[1:]),
-            transforms.RandomVerticalFlip(0.5),
-            transforms.RandomHorizontalFlip(0.5),
-            transforms.Lambda(lambda x : x + torch.randn_like(x)),
-            transforms.ColorJitter(brightness=0, contrast=0.4, saturation=0, hue=0),
-        ]
-
         with open(decision_birch_pickle_path, 'rb') as handle:
             self.decision_birch = pickle.load(handle)
-
-    def is_transformation_FHR_possible(self, faulty_cdps, data, target):
-        predicted_class_ = -1
-        predicted_cluster_ = -1
-        start_time = time.time()
-        OUT_OF_TIME = False
-        while (predicted_class_, predicted_cluster_) in faulty_cdps or predicted_class_ != target:
-            if time.time() - start_time >= self.time_budget:
-                OUT_OF_TIME = True
-                break
-
-            transformator = transforms.Compose(random.sample(self.available_transformations, 3))
-            data_ = transformator(data)
-
-            cdp_representation_, critical_neurons_layers_test_, predicted_class_, _ = self.deepcp.generate_cdp_representation(self.data_sample_preprocess_fn(data_))
-            if (cdp_representation_ is None and critical_neurons_layers_test_ is None and predicted_class_ is None) or predicted_class_ not in self.decision_birch.keys():
-                continue
-
-            predicted_cluster_ = self.decision_birch[predicted_class_].predict(cdp_representation_[None, ...])[0]
-        
-        return not OUT_OF_TIME
 
     def calculate_FHR(self, faulty_cdps):
         num_corrects = 0
@@ -72,33 +42,12 @@ class Verification:
                 continue
             
             predicted_cluster = self.decision_birch[predicted_class].predict(cdp_representation[None, ...])[0]
-            if (predicted_class, predicted_cluster) in faulty_cdps and target != predicted_class:
-                num_total_samples += 1                
-                if self.is_transformation_FHR_possible(faulty_cdps, data, target):
+            if (predicted_class, predicted_cluster) in faulty_cdps:
+                num_total_samples += 1
+                if target != predicted_class:
                     num_corrects += 1
 
         return num_corrects, num_total_samples
-
-    def is_transformation_HFR_possible(self, faulty_cdps, data, target):
-        predicted_class_ = -1
-        predicted_cluster_ = -1
-        start_time = time.time()
-        OUT_OF_TIME = False
-        while (predicted_class_, predicted_cluster_) not in faulty_cdps or predicted_class_ == target:
-            if time.time() - start_time >= self.time_budget:
-                OUT_OF_TIME = True
-                break
-
-            transformator = transforms.Compose(random.sample(self.available_transformations, 3))
-            data_ = transformator(data)
-
-            cdp_representation_, critical_neurons_layers_test_, predicted_class_, _ = self.deepcp.generate_cdp_representation(self.data_sample_preprocess_fn(data_))
-            if (cdp_representation_ is None and critical_neurons_layers_test_ is None and predicted_class_ is None) or predicted_class_ not in self.decision_birch.keys():
-                continue
-
-            predicted_cluster_ = self.decision_birch[predicted_class_].predict(cdp_representation_[None, ...])[0]
-        
-        return not OUT_OF_TIME
 
     def calculate_HFR(self, faulty_cdps):
         num_failures = 0
@@ -115,9 +64,9 @@ class Verification:
 
             predicted_cluster = self.decision_birch[predicted_class].predict(cdp_representation[None, ...])[0]
 
-            if (predicted_class, predicted_cluster) not in faulty_cdps and target == predicted_class:
+            if (predicted_class, predicted_cluster) not in faulty_cdps:
                 num_total_samples += 1
-                if self.is_transformation_HFR_possible(faulty_cdps, data, target):
+                if target == predicted_class:
                     num_failures += 1
 
         return num_failures, num_total_samples
@@ -237,9 +186,9 @@ def verify_main2():
     verification.run()
 
 def verify_main3():
-    ALPHA = 1.1
+    ALPHA = 0.99
 
-    lrp_src.lrp_layers.top_k_percent = 0.7
+    # lrp_src.lrp_layers.top_k_percent = 0.7
 
     test_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10('models/data', train=False, transform=transforms.Compose([
