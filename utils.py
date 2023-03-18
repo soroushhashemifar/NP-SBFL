@@ -23,7 +23,7 @@ def train(epoch, model, train_loader, optimizer, parameters):
         optimizer.zero_grad()
         output = model(data)
         # Calculate the loss The negative log likelihood loss. It is useful to train a classification problem with C classes.
-        loss = eval(f"F.{parameters['loss']}")(output, target)
+        loss = parameters['loss'](output, target)
         #dloss/dx for every Variable 
         loss.backward()
         #to do a one-step update on our parameter.
@@ -43,26 +43,28 @@ def test(model, test_loader, parameters, scheduler=None, log=True):
             data, target = data.cuda(), target.cuda()
         data, target = Variable(data), Variable(target)
         output = model(data)
-        test_loss += eval(f"F.{parameters['loss']}")(output, target, reduction='sum').data # sum up batch loss
+        test_loss += parameters['loss'](output, target).data # sum up batch loss
         pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
         correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
 
     test_loss /= len(test_loader.dataset)
 
+    accuracy = 100. * correct / len(test_loader.dataset)
     if log:
         print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
-            test_loss, correct, len(test_loader.dataset),
-            100. * correct / len(test_loader.dataset)))
+            test_loss, correct, len(test_loader.dataset), accuracy))
 
     if scheduler is not None:
         scheduler.step(test_loss)
+
+    return accuracy, test_loss
 
 
 class myLRPModel(LRPModel):
 
     def __init__(self, model: torch.nn.Module, layers_structure: list) -> None:
         self.layers_structure = layers_structure
-        self.relevancy_layers_to_filter = ["RelevancePropagationFlatten", "RelevancePropagationReLU", "RelevancePropagationDropout", "RelevancePropagationIdentity"]
+        self.relevancy_layers_to_filter = ["RelevancePropagationMaxPool2d", "RelevancePropagationFlatten", "RelevancePropagationReLU", "RelevancePropagationDropout", "RelevancePropagationIdentity"]
 
         super().__init__(model)
         
@@ -97,19 +99,19 @@ class myLRPModel(LRPModel):
         # Reverse order of activations to run backwards through model
         activations = activations[::-1]
         activations_to_return = activations.copy()
-        activations_to_return = [activations_to_return[i] for i, layer in enumerate(self.lrp_layers) if layer.__class__.__name__ not in self.relevancy_layers_to_filter]
+        activations_to_return = [(layer.__class__.__name__, activations_to_return[i]) for i, layer in enumerate(self.lrp_layers)]
         activations = [a.data.requires_grad_(True) for a in activations]
 
         # Initial relevance scores are the network's output activations
         relevance = torch.softmax(activations.pop(0), dim=-1)  # Unsupervised
 
         # Perform relevance propagation
-        relevances = [relevance]
+        relevances = [("Softmax", relevance)]
         for i, layer in enumerate(self.lrp_layers):
             relevance = layer.forward(activations.pop(0), relevance)
 
-            if layer.__class__.__name__ not in self.relevancy_layers_to_filter:
-                relevances.append(relevance)
+            # if layer.__class__.__name__ == "RelevancePropagationReLU":
+            relevances.append((layer.__class__.__name__, relevance))
 
         return relevances[::-1], activations_to_return[::-1]
 
@@ -166,14 +168,14 @@ def get_best_parameters(data, PCA_n_components, Birch_thresholds, Birch_n_cluste
     return optimal_threshold, optimal_n_clusters, optimal_n_components
 
 def get_tarantula_score(path_spectrum):
-    a_f_ratio = path_spectrum['A_F'] / (path_spectrum['A_F'] + path_spectrum['I_F'] + 0.0000001)
-    a_p_ratio = path_spectrum['A_P'] / (path_spectrum['A_P'] + path_spectrum['I_P'] + 0.0000001)
-    return a_f_ratio / (a_f_ratio + a_p_ratio + 0.0000001)
+    a_f_ratio = path_spectrum['A_F'] / (path_spectrum['A_F'] + path_spectrum['I_F'])
+    a_p_ratio = path_spectrum['A_P'] / (path_spectrum['A_P'] + path_spectrum['I_P'])
+    return a_f_ratio / (a_f_ratio + a_p_ratio)
 
 def get_ochiai_score(path_spectrum):
     total_faileds =  path_spectrum['A_F'] + path_spectrum['I_F']
     total_actives = path_spectrum['A_P'] + path_spectrum['A_F']
-    return path_spectrum['A_F'] / (math.sqrt(total_faileds * total_actives) + 0.0000001)
+    return path_spectrum['A_F'] / (np.sqrt(total_faileds * total_actives))
 
 def get_BARINEL_score(path_spectrum):
-    return path_spectrum["A_P"] / (path_spectrum["A_P"] + path_spectrum["A_F"] + 0.0000001)
+    return path_spectrum["A_P"] / (path_spectrum["A_P"] + path_spectrum["A_F"])

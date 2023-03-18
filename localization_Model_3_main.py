@@ -21,9 +21,7 @@ class Model3(DeepCP):
 
 
 if __name__ == "__main__":
-    ALPHA = 0.7
-
-    # lrp_src.lrp_layers.top_k_percent = 0.9
+    ALPHA = 0.4
 
     train_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10('models/data', train=True, download=True,
@@ -67,7 +65,10 @@ if __name__ == "__main__":
         alpha=ALPHA, beta=0.99, min_match=0.8, 
         PCA_n_components=[8, 32], 
         Birch_thresholds=[0.1, 0.5, 0.9],
-        Birch_n_clusters=[6, 10, 15],
+        Birch_n_clusters=[2, 4, 6], #[6, 10, 15],
     )
+    # relevancy, activations = model3.lrp_model.forward(torch.randn((1, *model3.input_size)))
+    # model3.layer_shapes = [r[0].shape[0] for r in activations[1:]]
+    # model3.layer_shapes.insert(0, model3.layer_shapes[0])
 
     model3.run()

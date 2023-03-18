@@ -40,7 +40,7 @@ class Verification:
             cdp_representation, critical_neurons_layers_test, predicted_class, _ = self.deepcp.generate_cdp_representation(self.data_sample_preprocess_fn(data))
             if (cdp_representation is None and critical_neurons_layers_test is None and predicted_class is None) or predicted_class not in self.decision_birch.keys():
                 continue
-            
+
             predicted_cluster = self.decision_birch[predicted_class].predict(cdp_representation[None, ...])[0]
             if (predicted_class, predicted_cluster) in faulty_cdps:
                 num_total_samples += 1
@@ -98,9 +98,9 @@ class Verification:
                 file.write(f"HFR: {num_failures} {num_total_samples_hfr} {hfr_rate}\n")
 
     def run(self):
-        self.verify("tarantula")
+        # self.verify("tarantula")
         self.verify("ochiai")
-        self.verify("barinel")
+        # self.verify("barinel")
 
 
 def verify_main1():

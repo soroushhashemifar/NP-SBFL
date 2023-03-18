@@ -1,9 +1,11 @@
+import sys
+sys.path.append("..")
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
-from utils import (test, train)
+from utils import test, train
 
 
 class Net(nn.Module):
@@ -14,18 +16,34 @@ class Net(nn.Module):
         self.fc2 = nn.Linear(128, 32)
         self.fc3 = nn.Linear(32, 10)
 
-    def forward(self, x):
-        x = x.view(-1, 784)
-        x = F.relu(self.fc1(x)) 
-        x = F.relu(self.fc2(x)) 
+    def forward(self, x, return_activations=False, return_logits=False):
+        logits = []
+        activations = []
+
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        logits.append(x)
+        x = F.relu(x)
+        activations.append(x)
+        x = self.fc2(x) 
+        logits.append(x)
+        x = F.relu(x) 
+        activations.append(x)
         x = self.fc3(x)
-        return F.log_softmax(x, dim=1)
+        logits.append(x)
+
+        if return_activations:
+            return x, activations
+        elif return_logits:
+            return x, logits
+
+        return x
 
 
 if __name__ == "__main__":
     batch_size = 128
     learning_rate = 0.001
-    num_epochs = 10
+    num_epochs = 100
     cuda = False
 
     #load the data
@@ -33,13 +51,13 @@ if __name__ == "__main__":
         datasets.MNIST('./data', train=True, download=True,
                     transform=transforms.Compose([
                         transforms.ToTensor(),
-                        transforms.Normalize((0.1307,), (0.3081,))
+                        # transforms.Normalize((0.1307,), (0.3081,))
                     ])),
         batch_size=batch_size, shuffle=True)
     test_loader = torch.utils.data.DataLoader(
         datasets.MNIST('./data', train=False, transform=transforms.Compose([
                         transforms.ToTensor(),
-                        transforms.Normalize((0.1307,), (0.3081,))
+                        # transforms.Normalize((0.1307,), (0.3081,))
                     ])),
         batch_size=batch_size, shuffle=True)
 
@@ -48,14 +66,17 @@ if __name__ == "__main__":
         model = model.cuda()
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=10)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=3)
     parameters = {
             "cuda": cuda,
-            "loss": "nll_loss",
+            "loss": nn.CrossEntropyLoss(),
             "log_interval": 10
         }
     for epoch in range(1, num_epochs + 1):
         train(epoch, model, train_loader, optimizer, parameters)
-        test(model, test_loader, parameters, scheduler)
+        acc, _ = test(model, test_loader, parameters, scheduler)
+        
+        if acc > 90:
+            break
 
     torch.save(model.state_dict(), "./Model_1.pth")

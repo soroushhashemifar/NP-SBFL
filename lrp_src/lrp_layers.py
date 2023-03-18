@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from lrp_src.filter import relevance_filter
 
-top_k_percent = 1. # 0.04  # Proportion of relevance scores that are allowed to pass.
+top_k_percent = 0.99 # 0.04  # Proportion of relevance scores that are allowed to pass.
 
 
 class RelevancePropagationAdaptiveAvgPool2d(nn.Module):
