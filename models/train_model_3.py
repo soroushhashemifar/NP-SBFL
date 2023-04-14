@@ -39,6 +39,7 @@ class Net(nn.Module):
         x = F.relu(x)
         activations.append(x)
         x = self.pool(x)
+        logits.append(x)
         x = self.dropout(x)
 
         x = self.conv3_1(x)
@@ -51,6 +52,7 @@ class Net(nn.Module):
         x = F.relu(x)
         activations.append(x)
         x = self.pool(x)
+        logits.append(x)
         x = self.dropout(x)
         
         x = torch.flatten(x, 1) # flatten all dimensions except batch

@@ -178,4 +178,4 @@ def get_ochiai_score(path_spectrum):
     return path_spectrum['A_F'] / (np.sqrt(total_faileds * total_actives))
 
 def get_BARINEL_score(path_spectrum):
-    return path_spectrum["A_P"] / (path_spectrum["A_P"] + path_spectrum["A_F"])
+    return 1 - path_spectrum["A_P"] / (path_spectrum["A_P"] + path_spectrum["A_F"])

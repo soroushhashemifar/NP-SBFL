@@ -2,6 +2,7 @@ import os
 import pickle
 import random
 import time
+from tracemalloc import start
 
 import numpy as np
 import torch
@@ -11,303 +12,189 @@ from sklearn.cluster import Birch
 from sklearn.decomposition import IncrementalPCA
 from sklearn.pipeline import Pipeline
 from torch.autograd import Variable
+from torchvision import datasets, transforms
 
 from utils import (myLRPModel, get_best_parameters, jaccard_sim, min_subarray_with_sum_gt_target, 
                     get_tarantula_score, get_ochiai_score, get_BARINEL_score)
 
 
+from models.train_model_3 import Net
+
+
 class DeepCP:
 
-    def __init__(self, model_name, model, layers_structure, input_size=(1, 28, 28), train_loader=None, test_loader=None, 
-                    path_to_save_pickles="pickles", device="cpu", batch_size=16, alpha=0.9, 
-                    beta=0.6, min_match=0.8, PCA_n_components=[], Birch_thresholds=[], Birch_n_clusters=[]):
+    def __init__(self, model_name, model, layers_structure, alpha=0.99, beta=0.7, activation_threshold=0., input_size=(1, 28, 28), train_loader=None, 
+                    path_to_save_pickles="pickles", device="cpu"):
         self.model_name = model_name
         self.input_size = input_size
+        self.alpha = alpha
+        self.beta = beta
+        self.activation_threshold = activation_threshold
 
-        self.path_to_save_activations = self.model_name + "_activations"
-        self.path_to_save_representations = self.model_name + "_representations"
         self.path_to_save_pickles = path_to_save_pickles
 
         self.train_loader = train_loader
-        self.test_loader = test_loader
-
+        
         self.cuda = True if device == "cuda" else False
-        self.batch_size = batch_size
 
-        self.alpha = alpha
-        self.beta = beta
-        self.min_match = min_match
-        self.PCA_n_components = PCA_n_components
-        self.Birch_thresholds = Birch_thresholds
-        self.Birch_n_clusters = Birch_n_clusters
-
+        self.model = model
         self.lrp_model = myLRPModel(model, layers_structure)
-        relevancy, _ = self.lrp_model.forward(torch.randn((1, *input_size)))
-        self.layer_shapes = [list(r[0].shape)[0] for r in relevancy[1:]]
-
+        _, activations, _, _ = self.get_relevancy_and_activations(torch.randn((1, *self.input_size)))
+        self.layer_shapes = [a.shape[1] for a in activations]
+        print(self.layer_shapes)
+        
     def get_relevancy_and_activations(self, data):
         pass
 
     def generate_cdp_representation(self, data):
-        relevancy, activations = self.get_relevancy_and_activations(data)
-        g_fx = torch.sum(relevancy[0]).item()
+        relevancy, activations, g_fx, predicted_class = self.get_relevancy_and_activations(data)
 
         # Path Extraction
-        try:
-            critical_neurons_layers_test = []
-            for i in range(1, len(relevancy)):
-                critical_neurons_layer = min_subarray_with_sum_gt_target(relevancy[i][0], self.alpha * g_fx)
-                if critical_neurons_layer.shape[0] == 0:
-                    return None, None, None, None
+        critical_neurons_layers_test = []
+        for i in range(1, len(relevancy)):
+            critical_neurons_layer = min_subarray_with_sum_gt_target(relevancy[i][0], self.alpha * g_fx)
+            if critical_neurons_layer.shape[0] == 0:
+                return None, None, None, None
 
-                critical_neurons_layers_test.append(critical_neurons_layer)
-        except:
-            return None, None, None, None
+            critical_neurons_layers_test.append(critical_neurons_layer)
 
-        predicted_class = torch.max(relevancy[-1], dim=1).indices.item()
-
-        # print(critical_neurons_layers_test)
-        cdp_representation = torch.zeros(sum(self.layer_shapes))
+        cdp_representation = np.zeros(sum(self.layer_shapes))
+        indices = np.cumsum([0] + self.layer_shapes)
         for i in range(len(critical_neurons_layers_test)):
-            if i == 0:
-                cdp_representation[critical_neurons_layers_test[i]] = 1
-            else:
-                cdp_representation[sum(self.layer_shapes[:i]) + critical_neurons_layers_test[i]] = 1
+            cdp_representation[indices[i] + critical_neurons_layers_test[i]] = 1
 
-        return cdp_representation, critical_neurons_layers_test, predicted_class, activations
+        activations_vector = np.zeros(sum(self.layer_shapes))
+        indices = np.cumsum([0] + self.layer_shapes)
+        for i in range(indices.shape[0]-1):
+            activations_vector[indices[i]:indices[i+1]] = activations[i]
 
-    def generate_class_separated_cdps(self):
-        if not os.path.isdir(self.path_to_save_activations):
-            os.mkdir(self.path_to_save_activations)
+        activation_mask = np.zeros(sum(self.layer_shapes))
+        indices = np.cumsum([0] + self.layer_shapes)
+        for i in range(indices.shape[0]-1):
+            activation_mask[indices[i]:indices[i+1]] = np.where(activations_vector[indices[i]:indices[i+1]] > self.activation_threshold, 1, 0)
+            if sum(activation_mask[indices[i]:indices[i+1]]) == 0:
+                activation_mask[indices[i]:indices[i+1]][np.argmax(activations_vector[indices[i]:indices[i+1]])] = 1
 
-        if not os.path.isdir(self.path_to_save_representations):
-            os.mkdir(self.path_to_save_representations)
+        return cdp_representation, critical_neurons_layers_test, predicted_class, activation_mask
 
-        class_separated_samples = {}
+    def find_critical_neurons(self):
+        cdp_representations_failure = 0
+        num_failures = 0
+        cdp_representations_pass = 0
+        num_passes = 0
         for data, target in tqdm.tqdm(self.train_loader):
             if self.cuda:
                 data, target = data.cpu(), target.cpu()
 
             data, target = Variable(data), Variable(target)
 
-            cdp_representation, _, predicted_class, activations = self.generate_cdp_representation(data)
+            cdp_representation, critical_neurons_layers, predicted_class, activation_mask = self.generate_cdp_representation(data)
             if cdp_representation is None and predicted_class is None:
                 continue
-
-            class_samples = class_separated_samples.get(predicted_class, [])
-            filename = str(random.getrandbits(24)) + ".pickle"
-            activations_name = os.path.join(self.path_to_save_activations, filename)
-            with open(activations_name, "wb") as handle:
-                pickle.dump(activations, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-            representation_name = os.path.join(self.path_to_save_representations, filename)
-            with open(representation_name, "wb") as handle:
-                pickle.dump(cdp_representation.detach().numpy(), handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-            class_samples.append((representation_name, activations_name))
-            class_separated_samples[predicted_class] = class_samples
             
-        return class_separated_samples
+            if predicted_class != target:
+                cdp_representations_failure += cdp_representation
+                num_failures += 1
+            # else:
+            #     cdp_representations_pass += cdp_representation
+            #     num_passes += 1
 
-    def generate_abstract_cdps(self, class_separated_samples):
-        # TODO: reform the cdp representation because of its huge size for large networks
+        mean_cdp_representation_failure = cdp_representations_failure / num_failures
+        # mean_cdp_representation_pass = cdp_representations_pass / num_passes
+        
+        criticals_mask = np.zeros_like(mean_cdp_representation_failure)
+        indices = np.cumsum([0] + self.layer_shapes)
+        for i in range(indices.shape[0]-1):
+            mask_failure = np.where(mean_cdp_representation_failure[indices[i]:indices[i+1]] >= self.beta, 1, 0)
+            # mask_pass = np.where(mean_cdp_representation_pass[indices[i]:indices[i+1]] <= 1 - self.beta, 1, 0)
+            criticals_mask[indices[i]:indices[i+1]] = mask_failure #* mask_pass
+            if sum(criticals_mask[indices[i]:indices[i+1]]) == 0:
+                criticals_mask[indices[i]:indices[i+1]][np.argmax(mean_cdp_representation_failure[indices[i]:indices[i+1]])] = 1
 
-        decision_graph = {}
-        decision_birch = {}
-        for c in tqdm.tqdm(sorted(class_separated_samples.keys())):
-            # Path Abstraction: Intra-Class Path Clustering
-            if len(class_separated_samples[c]) < 4:
-                continue
+        return criticals_mask
 
-            cdp_representations = []
-            sample_activations = []
-            for cdp_reps, sample_activs in class_separated_samples[c]:
-                with open(cdp_reps, 'rb') as handle:
-                    representation = pickle.load(handle)
+    def calculate_hit_spectrums(self):
+        critical_neurons_vector = self.find_critical_neurons()
 
-                cdp_representations.append(representation)
-                sample_activations.append(sample_activs)
-
-            optimal_threshold, optimal_n_clusters, optimal_n_components = get_best_parameters(cdp_representations, self.PCA_n_components, self.Birch_thresholds, self.Birch_n_clusters, self.batch_size)
-            decision_birch[c] = Pipeline([
-                ('dim_red', IncrementalPCA(n_components=optimal_n_components, batch_size=self.batch_size)), 
-                ('clustering', Birch(threshold=optimal_threshold, n_clusters=optimal_n_clusters))
-                ])
-            decision_birch[c].fit(cdp_representations)
-            cluster_labels = decision_birch[c].predict(cdp_representations)
-
-            # Path Abstraction: Path Merging
-            for cluster_index in set(cluster_labels):
-                cluster_samples = np.array(cdp_representations)[cluster_labels==cluster_index]
-                neuron_criticality_weights = cluster_samples.mean(axis=0)
-
-                s_hat_beta = []
-                for i in range(len(self.layer_shapes)):
-                    if i == 0:
-                        start_index = 0
-                        end_index = sum(self.layer_shapes[:i+1])
-                    else:
-                        start_index = sum(self.layer_shapes[:i])
-                        end_index = sum(self.layer_shapes[:i+1])
-
-                    abstract_critical_neurons = np.where(neuron_criticality_weights[start_index:end_index] >= self.beta)[0]
-                    if abstract_critical_neurons.shape[0] == 0:
-                        abstract_critical_neurons = np.array([np.argmax(neuron_criticality_weights[start_index:end_index])])
-
-                    s_hat_beta.append(abstract_critical_neurons)
-
-                print("abstract CDP for cluster", (c, cluster_index), s_hat_beta)
-
-                cluster_samples_activations = [sample_activations[i] for i in np.where(cluster_labels == cluster_index)[0]]
-                activations_filename = os.path.join(self.path_to_save_activations, f"cluster_samples_activations_{c}_{cluster_index}.pickle")
-                with open(activations_filename, 'wb') as handle:
-                    pickle.dump(cluster_samples_activations, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-                decision_graph[(c, cluster_index)] = s_hat_beta
-
-        return decision_graph, decision_birch
-
-    def calculate_acdp_hit_spectrums(self, decision_graph, decision_birch):
-        print("Calculating hit spectrums")
-
-        cdp_spectrums = {}
-        for key in decision_graph.keys():
-            cdp_spectrums[key] = {"A_P": 0, "I_P": 0, "A_F": 0, "I_F": 0}
-
-        for data, target in tqdm.tqdm(self.test_loader):
+        neuron_hit_spectrums = {
+            "A_P": 0, 
+            "I_P": 0, 
+            "A_F": 0, 
+            "I_F": 0, 
+        }
+        for data, target in tqdm.tqdm(self.train_loader):
             if self.cuda:
                 data, target = data.cpu(), target.cpu()
 
             data, target = Variable(data), Variable(target)
 
-            cdp_representation, critical_neurons_layers_test, predicted_class, activations = self.generate_cdp_representation(data)
-            if (cdp_representation is None and critical_neurons_layers_test is None and predicted_class is None) or predicted_class not in decision_birch.keys():
+            cdp_representation, critical_neurons_layers, predicted_class, activation_mask = self.generate_cdp_representation(data)
+            if cdp_representation is None and predicted_class is None:
                 continue
 
-            predicted_cluster = decision_birch[predicted_class].predict(cdp_representation[None, ...])[0]
-            # critical_neurons_layers_abstract_cdp = decision_graph[(predicted_class, predicted_cluster)]
+            # critical_neurons_vector = cdp_representation
 
-            # jacc_sims_of_cdps = [jaccard_sim(s_i.tolist(), s_hat_i.tolist()) for s_i, s_hat_i in zip(critical_neurons_layers_test, critical_neurons_layers_abstract_cdp)]
-            # mean_jacc_sim_structural = sum(jacc_sims_of_cdps) / len(jacc_sims_of_cdps)
-
-            # with open(os.path.join(self.path_to_save_activations, f"cluster_samples_activations_{predicted_class}_{predicted_cluster}.pickle"), 'rb') as handle:
-            #     cluster_samples_activations = pickle.load(handle)
-
-            # # TODO: sample activations w.r.t a criteria
-            # subset_cluster_samples_activations = random.sample(cluster_samples_activations, min(10, len(cluster_samples_activations)))
-
-            # similarities = []
-            # for sample_activation_path in subset_cluster_samples_activations:
-            #     with open(sample_activation_path, "rb") as handle:
-            #         sample_activation = pickle.load(handle)
-
-            #     similarities_ = []
-            #     for sample_layer_actv, layer_critical_neurons, test_layer_actv in zip(sample_activation, critical_neurons_layers_abstract_cdp, activations):
-            #         sample_layer_state = np.where(sample_layer_actv.detach().cpu() > 0., 1, 0)[0]
-            #         test_layer_state = np.where(test_layer_actv.detach().cpu() > 0., 1, 0)[0]
-
-            #         similarity = 1 - hamming(sample_layer_state[layer_critical_neurons].tolist(), test_layer_state[layer_critical_neurons].tolist())
-            #         similarities_.append(similarity)
-
-            #     temp_ = sum(similarities_) / len(similarities_)
-            #     similarities.append(temp_)
-
-            # mean_jacc_sim_activational = sum(similarities) / len(similarities) if len(similarities) != 0 else 0.
-
-            # if mean_jacc_sim_structural >= self.min_match and mean_jacc_sim_activational >= self.min_match:
-            if predicted_class == target.item():
-                cdp_spectrums[(predicted_class, predicted_cluster)]["A_P"] = cdp_spectrums[(predicted_class, predicted_cluster)]["A_P"] + 1
-
-                # increase I_P for other clusters inside that class
-                for cluster_index in range(decision_birch[predicted_class]["clustering"].n_clusters):
-                    if cluster_index != predicted_cluster:
-                        cdp_spectrums[(predicted_class, cluster_index)]["I_P"] = cdp_spectrums[(predicted_class, cluster_index)]["I_P"] + 1
-                # for class_index, cluster_index in cdp_spectrums.keys():
-                #     if (class_index, cluster_index) != (predicted_class, predicted_cluster):
-                #         cdp_spectrums[(class_index, cluster_index)]["I_P"] = cdp_spectrums[(class_index, cluster_index)]["I_P"] + 1
+            if predicted_class == target:
+                neuron_hit_spectrums["A_P"] += activation_mask * critical_neurons_vector
+                neuron_hit_spectrums["I_P"] += (1 - activation_mask) * critical_neurons_vector
             else:
-                cdp_spectrums[(predicted_class, predicted_cluster)]["A_F"] = cdp_spectrums[(predicted_class, predicted_cluster)]["A_F"] + 1
+                neuron_hit_spectrums["A_F"] += activation_mask * critical_neurons_vector
+                neuron_hit_spectrums["I_F"] += (1 - activation_mask) * critical_neurons_vector
 
-                # increase I_F for corresponding cluster in target class
-                predicted_cluster = decision_birch[target.item()].predict(cdp_representation[None, ...])[0]
-                cdp_spectrums[(target.item(), predicted_cluster)]["I_F"] = cdp_spectrums[(target.item(), predicted_cluster)]["I_F"] + 1
+        return neuron_hit_spectrums
 
-        print(cdp_spectrums)
-
-        return cdp_spectrums
-
-    def get_scores_from_spectrums(self, cdp_spectrums, SFL_strategy):
-        scores = []
-        for key, path_spectrum in cdp_spectrums.items():
-            if SFL_strategy == "tarantula":
-                score = get_tarantula_score(path_spectrum)
-            elif SFL_strategy == "ochiai":
-                score = get_ochiai_score(path_spectrum)
-            elif SFL_strategy == "barinel":
-                score = get_BARINEL_score(path_spectrum)
-            else:
-                raise Exception("wrong SFL strategy!")
-                
-            scores.append((key, score))
-
+    def get_scores_from_spectrums(self, neuron_hit_spectrums, SFL_strategy):
+        if SFL_strategy == "tarantula":
+            scores = get_tarantula_score(neuron_hit_spectrums)
+        elif SFL_strategy == "ochiai":
+            scores = get_ochiai_score(neuron_hit_spectrums)
+        elif SFL_strategy == "barinel":
+            scores = get_BARINEL_score(neuron_hit_spectrums)
+        else:
+            raise Exception("wrong SFL strategy!")
+            
         return scores
+
+    def get_layerwise_suspiciousness_scores(self, scores_vector):
+        layerwise_suspicousness_scores = []
+        indices = np.cumsum([0] + self.layer_shapes)
+        for i in range(indices.shape[0]-1):
+            layer_scores = scores_vector[indices[i]:indices[i+1]]
+            layer_scores = list(zip(range(layer_scores.shape[0]), layer_scores))
+            layerwise_suspicousness_scores.append(layer_scores)
+
+        return layerwise_suspicousness_scores
+
+    def write_objects(self, object_dictionary, SFL_strategy):
+        with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_{SFL_strategy}_objects.pickle"), 'wb') as handle1: 
+            pickle.dump(object_dictionary, handle1, protocol=pickle.HIGHEST_PROTOCOL)
 
     def run(self):
         if not os.path.isdir(self.path_to_save_pickles):
             os.makedirs(self.path_to_save_pickles)
 
-        if not os.path.isfile(os.path.join(self.path_to_save_pickles, f"{self.model_name}_class_separated_samples.pickle")):
-            class_separated_samples = self.generate_class_separated_cdps()
+        neuron_hit_spectrums = self.calculate_hit_spectrums()
 
-            with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_class_separated_samples.pickle"), 'wb') as handle1: 
-                pickle.dump(class_separated_samples, handle1, protocol=pickle.HIGHEST_PROTOCOL)
-        
-            time.sleep(5)
-        else:
-            print("Loading previous files for class_separated_samples")
-            with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_class_separated_samples.pickle"), 'rb') as handle1:
-                class_separated_samples = pickle.load(handle1)
+        scores_vector = self.get_scores_from_spectrums(neuron_hit_spectrums, "tarantula")
+        layerwise_scores = self.get_layerwise_suspiciousness_scores(scores_vector)
+        self.write_objects({
+            "neuron_hit_spectrums": neuron_hit_spectrums,
+            "scores_vector": scores_vector,
+            "layerwise_suspicousness_scores": layerwise_scores,
+        }, "tarantula")
 
-        if not os.path.isfile(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_graph.pickle")):
-            decision_graph, decision_birch = self.generate_abstract_cdps(class_separated_samples)
+        scores_vector = self.get_scores_from_spectrums(neuron_hit_spectrums, "ochiai")
+        layerwise_scores = self.get_layerwise_suspiciousness_scores(scores_vector)
+        self.write_objects({
+            "neuron_hit_spectrums": neuron_hit_spectrums,
+            "scores_vector": scores_vector,
+            "layerwise_suspicousness_scores": layerwise_scores,
+        }, "ochiai")
 
-            with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_graph.pickle"), 'wb') as handle1, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_birch.pickle"), 'wb') as handle2:
-                pickle.dump(decision_graph, handle1, protocol=pickle.HIGHEST_PROTOCOL)
-                pickle.dump(decision_birch, handle2, protocol=pickle.HIGHEST_PROTOCOL)
-
-            time.sleep(5)
-        else:
-            print("Loading previous files for decision_graph and decision_birch")
-            with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_graph.pickle"), 'rb') as handle1, open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_decision_birch.pickle"), 'rb') as handle2:
-                decision_graph = pickle.load(handle1)
-                decision_birch = pickle.load(handle2)
-
-        cdp_spectrums = self.calculate_acdp_hit_spectrums(decision_graph, decision_birch)
-
-        with open(os.path.join(self.path_to_save_pickles, f"{self.model_name}_cdp_spectrums.pickle"), 'wb') as handle:
-            pickle.dump(cdp_spectrums, handle, protocol=pickle.HIGHEST_PROTOCOL)
-            time.sleep(5)
-
-        if not os.path.isdir("results"):
-            os.makedirs("results")
-
-        scores = self.get_scores_from_spectrums(cdp_spectrums, "tarantula")
-        scores = sorted(scores, key=lambda item: -item[1])
-        with open(os.path.join("results", f"{self.model_name}_tarantula.txt"), "w") as file:
-            for cdp_class, score in scores:
-                cdp = str(list(map(lambda item: item.tolist(), decision_graph[cdp_class])))
-                file.write(f"{cdp_class}\t{score}\t{cdp}\n")
-
-        scores = self.get_scores_from_spectrums(cdp_spectrums, "ochiai")
-        scores = sorted(scores, key=lambda item: -item[1])
-        with open(os.path.join("results", f"{self.model_name}_ochiai.txt"), "w") as file:
-            for cdp_class, score in scores:
-                cdp = str(list(map(lambda item: item.tolist(), decision_graph[cdp_class])))
-                file.write(f"{cdp_class}\t{score}\t{cdp}\n")
-
-        scores = self.get_scores_from_spectrums(cdp_spectrums, "barinel")
-        scores = sorted(scores, key=lambda item: -item[1])
-        with open(os.path.join("results", f"{self.model_name}_barinel.txt"), "w") as file:
-            for cdp_class, score in scores:
-                cdp = str(list(map(lambda item: item.tolist(), decision_graph[cdp_class])))
-                file.write(f"{cdp_class}\t{score}\t{cdp}\n")
+        scores_vector = self.get_scores_from_spectrums(neuron_hit_spectrums, "barinel")
+        layerwise_scores = self.get_layerwise_suspiciousness_scores(scores_vector)
+        self.write_objects({
+            "neuron_hit_spectrums": neuron_hit_spectrums,
+            "scores_vector": scores_vector,
+            "layerwise_suspicousness_scores": layerwise_scores,
+        }, "barinel")

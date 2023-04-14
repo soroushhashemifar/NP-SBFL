@@ -5,13 +5,13 @@ import torchvision.transforms as transforms
 from torchvision import datasets, transforms
 import tqdm
 from models.train_model_1 import Net as Net1
-from localization_Model_1_main import Model1
+from localization_Model_1 import Model1
 from models.train_model_2 import Net as Net2
-from localization_Model_2_main import Model2
+from localization_Model_2 import Model2
 from utils import test, train
 import torch.optim as optim
 from models.train_model_3 import Net as Net3
-from localization_Model_3_main import Model3
+from localization_Model_3 import Model3
 import lrp_src
 
 

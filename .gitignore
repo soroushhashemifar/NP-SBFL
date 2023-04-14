@@ -1,8 +1,6 @@
 __pycache__/
 .vscode/
-*activations/
 data/
-*representations/
-pickles/
-_config.py
 _*/
+_*
+synthesized_dataset_*.pickle
