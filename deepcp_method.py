@@ -18,7 +18,7 @@ from utils import (myLRPModel, get_best_parameters, jaccard_sim, min_subarray_wi
                     get_tarantula_score, get_ochiai_score, get_BARINEL_score)
 
 
-from models.train_model_3 import Net
+from models.train_model_6 import Net
 
 
 class DeepCP:

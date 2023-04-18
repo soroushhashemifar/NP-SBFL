@@ -50,11 +50,9 @@ class Synthesize:
         layerwise_suspicousness_scores = self.objects_dict["layerwise_suspicousness_scores"]
         suspicousness_neurons_per_layer = []
         for layer_scores in layerwise_suspicousness_scores:
-            # layer_scores_ = list(filter(lambda item: not np.isnan(item[1]) and item[1] > suspiciousness_threshold, layer_scores))
             layer_scores_ = list(filter(lambda item: not np.isnan(item[1]), layer_scores))
             layer_scores_ = sorted(layer_scores_, key=lambda item: item[1])
             layer_scores_ = layer_scores_[:suspiciousness_threshold]
-            # print(len(layer_scores_))
             
             if len(layer_scores_) == 0:
                 layer_scores_ = [max(layer_scores, key=lambda item: not np.isnan(item[1]) and item[1])]
@@ -66,33 +64,40 @@ class Synthesize:
     def synthesize_testset(self, suspicousness_neurons_per_layer):
         synthesized_dataset = []
         for data, target in tqdm.tqdm(self.test_loader):
-            inputs = torch.autograd.Variable(data, requires_grad=True)
-            outputs, features = self.model(inputs, return_logits=True)
-            outputs = torch.softmax(outputs, 1)
-            outputs = torch.argmax(outputs, 1)
+            data_ = data.clone()
+            target_ = target.clone()
+            for iteration in range(3):
+                inputs = torch.autograd.Variable(data_, requires_grad=True)
+                outputs, features = self.model(inputs, return_logits=True)
+                outputs = torch.softmax(outputs, 1)
+                outputs = torch.argmax(outputs, 1)
 
-            features = [feature.flatten(1) for feature in features]
-            # print([a.shape for a in features])
+                features = [feature.flatten(1) for feature in features]
 
-            mask = outputs == target
-            gradients = []
-            for layer_idx in range(len(suspicousness_neurons_per_layer)):
-                for sn_index, _ in suspicousness_neurons_per_layer[layer_idx]:
-                    features_ = features[layer_idx][:, [sn_index]]
-                    gradients_ = torch.autograd.grad(outputs=features_, inputs=inputs, grad_outputs=torch.ones(features_.size()).to("cpu"), retain_graph=True)[0]
-                    gradients_ = gradients_[mask]
-                    gradients.append(gradients_)
+                if iteration == 0:
+                    mask = outputs == target_
+                    data_original = data_[mask]
+                else:
+                    mask = torch.ones_like(target_, dtype=torch.bool)
 
-            data = data[mask]
-            perturbed_data = data.clone()
-            perturbed_data = self.synthsize_image(data, perturbed_data, gradients)
-            perturbed_data = self.applyDomainConstraints(perturbed_data)
+                gradients = []
+                for layer_idx in range(len(suspicousness_neurons_per_layer)):
+                    for sn_index, _ in suspicousness_neurons_per_layer[layer_idx]:
+                        features_ = features[layer_idx][:, [sn_index]]
+                        gradients_ = torch.autograd.grad(outputs=features_, inputs=inputs, grad_outputs=torch.ones(features_.size()).to("cpu"), retain_graph=True)[0]
+                        gradients_ = gradients_[mask]
+                        gradients.append(gradients_)
 
-            data = data.permute(0, 2, 3, 1).numpy()
-            perturbed_data = perturbed_data.permute(0, 2, 3, 1).numpy()
-            target = target[mask].numpy()
-            for datam, perturbed_datam, label in zip(data, perturbed_data, target):
-                synthesized_dataset.append((datam, perturbed_datam, label))
+                data_ = data_[mask]
+                perturbed_data = data_.clone()
+                perturbed_data = self.synthsize_image(data_, perturbed_data, gradients)
+                perturbed_data = self.applyDomainConstraints(perturbed_data)
+
+                target_ = target_[mask]
+                data_ = perturbed_data
+
+            for datam, perturbed_datam, label in zip(data_original, perturbed_data, target_):
+                synthesized_dataset.append((datam.permute(1, 2, 0).numpy(), perturbed_datam.permute(1, 2, 0).numpy(), label.numpy()))
 
         return synthesized_dataset
 
@@ -101,7 +106,7 @@ class Synthesize:
         suspicousness_neurons_per_layer = self.get_suspicious_neurons(SFL_strategy, suspiciousness_threshold)
         # print(suspicousness_neurons_per_layer)
         synthesized_dataset = self.synthesize_testset(suspicousness_neurons_per_layer)
-        with open(f"./pickles/synthesized_dataset_{self.model_name}_{SFL_strategy}.pickle", 'wb') as handle:
+        with open(f"./pickles/synthesized_dataset_{self.model_name}_{SFL_strategy}_k{suspiciousness_threshold}.pickle", 'wb') as handle:
             pickle.dump(synthesized_dataset, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
@@ -121,10 +126,10 @@ class SynthesizedDataset(torch.utils.data.Dataset):
         return perturbed_data, label
 
 
-def evaluation(model_name, SFL_strategy, model, test_loader, parameters):
+def evaluation(model_name, SFL_strategy, model, test_loader, parameters, suspiciousness_threshold):
     print(f"Evaluation synthesized dataset for {SFL_strategy}")
 
-    with open(f"./pickles/synthesized_dataset_{model_name}_{SFL_strategy}.pickle", 'rb') as handle:
+    with open(f"./pickles/synthesized_dataset_{model_name}_{SFL_strategy}_k{suspiciousness_threshold}.pickle", 'rb') as handle:
         synthesized_dataset = pickle.load(handle)
 
     synth_dataset = SynthesizedDataset(synthesized_dataset)

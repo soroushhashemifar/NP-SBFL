@@ -51,8 +51,7 @@ def test(model, test_loader, parameters, scheduler=None, log=True):
 
     accuracy = 100. * correct / len(test_loader.dataset)
     if log:
-        print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
-            test_loss, correct, len(test_loader.dataset), accuracy))
+        print(f'Test set: Average loss: {test_loss}, Accuracy: {correct}/{len(test_loader.dataset)} ({accuracy}%)')
 
     if scheduler is not None:
         scheduler.step(test_loss)

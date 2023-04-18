@@ -9,14 +9,16 @@ from utils import test, train
 
 
 class Net(nn.Module):
-    #This defines the structure of the NN.
+
     def __init__(self):
         super(Net, self).__init__()
-        self.fc1 = nn.Linear(784, 256)
-        self.fc2 = nn.Linear(256, 128)
-        self.fc3 = nn.Linear(128, 64)
-        self.fc4 = nn.Linear(64, 32)
-        self.fc5 = nn.Linear(32, 10)
+        self.fc1 = nn.Linear(784, 25)
+        self.fc2 = nn.Linear(25, 25)
+        self.fc3 = nn.Linear(25, 25)
+        self.fc4 = nn.Linear(25, 25)
+        self.fc5 = nn.Linear(25, 25)
+        self.fc6 = nn.Linear(25, 25)
+        self.out = nn.Linear(25, 10)
 
     def forward(self, x, return_activations=False, return_logits=False):
         logits = []
@@ -27,19 +29,33 @@ class Net(nn.Module):
         logits.append(x)
         x = F.relu(x)
         activations.append(x)
-        x = self.fc2(x)
+
+        x = self.fc2(x) 
         logits.append(x)
-        x = F.relu(x) 
+        x = F.relu(x)
         activations.append(x)
+
         x = self.fc3(x)
         logits.append(x)
-        x = F.relu(x) 
+        x = F.relu(x)
         activations.append(x)
+
         x = self.fc4(x)
         logits.append(x)
         x = F.relu(x)
         activations.append(x)
+
         x = self.fc5(x)
+        logits.append(x)
+        x = F.relu(x)
+        activations.append(x)
+
+        x = self.fc6(x)
+        logits.append(x)
+        x = F.relu(x)
+        activations.append(x)
+
+        x = self.out(x)
         logits.append(x)
 
         if return_activations:
@@ -86,7 +102,7 @@ if __name__ == "__main__":
         train(epoch, model, train_loader, optimizer, parameters)
         acc, _ = test(model, test_loader, parameters, scheduler)
         
-        if acc > 90:
+        if acc >= 95.8:
             break
 
-    torch.save(model.state_dict(), "./Model_2.pth")
+    torch.save(model.state_dict(), "./Model_mnist_2.pth")

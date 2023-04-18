@@ -5,7 +5,7 @@ import random
 import cv2
 
 
-for model_name in ["Model_1", "Model_2", "Model_3"]:
+for model_name in ["Model_cifar_1"]:
     for SFL_strategy in ["tarantula", "ochiai", "barinel"]:
         with open(f"../pickles/synthesized_dataset_{model_name}_{SFL_strategy}.pickle", 'rb') as handle:
             synthesized_dataset = pickle.load(handle)

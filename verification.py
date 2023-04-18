@@ -9,9 +9,9 @@ from torch.autograd import Variable
 
 class Verification:
 
-    def __init__(self, deepcp, pickles_path):
+    def __init__(self, deepcp):
         self.deepcp = deepcp
-        self.pickles_path = pickles_path
+        self.pickles_path = deepcp.path_to_save_pickles
 
     # def get_faulty_paths_vector(self, SFL_strategy, suspiciousness_threshold):
     #     with open(os.path.join(self.pickles_path, f"{self.deepcp.model_name}_{SFL_strategy}_objects.pickle"), 'rb') as handle:
@@ -91,7 +91,7 @@ class Verification:
         return num_failed_tests, num_total_tests_failed, num_passed_tests, num_total_tests_passed, num_activating_faulty_neurons
 
     def verify(self, SFL_strategy, suspiciousness_threshold):
-        with open(f"./pickles/synthesized_dataset_{self.deepcp.model_name}_{SFL_strategy}.pickle", 'rb') as handle:
+        with open(f"./pickles/synthesized_dataset_{self.deepcp.model_name}_{SFL_strategy}_k{suspiciousness_threshold}.pickle", 'rb') as handle:
             synthesized_dataset = pickle.load(handle)
 
         synth_dataset = SynthesizedDataset(synthesized_dataset)
@@ -104,7 +104,7 @@ class Verification:
 
         print("fails activating faulty paths:", num_failed_tests, num_total_tests_failed, num_failed_tests / num_total_tests_failed)
         # print("passes not activating faulty paths", num_passed_tests, num_total_tests_passed, num_passed_tests / num_total_tests_passed)
-        print("synthesized samples activating faulty neurons:", num_activating_faulty_neurons, num_total_tests_failed+num_total_tests_passed, num_activating_faulty_neurons / (num_total_tests_failed+num_total_tests_passed))
+        print("synthesized samples activating faulty paths:", num_activating_faulty_neurons, num_total_tests_failed+num_total_tests_passed, num_activating_faulty_neurons / (num_total_tests_failed+num_total_tests_passed))
 
 class SynthesizedDataset(torch.utils.data.Dataset):
 

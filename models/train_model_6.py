@@ -9,60 +9,56 @@ from utils import test, train
 
 
 class Net(nn.Module):
-
+    
     def __init__(self):
-        super(Net, self).__init__()
-        self.fc1 = nn.Linear(784, 20)
-        self.fc2 = nn.Linear(20, 20)
-        self.fc3 = nn.Linear(20, 20)
-        self.fc4 = nn.Linear(20, 20)
-        self.fc5 = nn.Linear(20, 20)
-        self.fc6 = nn.Linear(20, 20)
-        self.fc7 = nn.Linear(20, 20)
-        self.fc8 = nn.Linear(20, 20)
-        self.out = nn.Linear(20, 10)
+        super().__init__()
+        self.conv1_1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
+        self.conv1_2 = nn.Conv2d(32, 32, kernel_size=3, padding=0)
+        self.conv2_1 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.conv2_2 = nn.Conv2d(64, 64, kernel_size=3, padding=0)
+
+        self.pool = nn.MaxPool2d(2, 2)
+
+        self.fc1 = nn.Linear(2304, 512)
+        self.out = nn.Linear(512, 10)
+
+        self.dropout = nn.Dropout(0.25)
 
     def forward(self, x, return_activations=False, return_logits=False):
         logits = []
         activations = []
 
+        x = self.conv1_1(x)
+        logits.append(x)
+        x = F.relu(x)
+        activations.append(x)
+
+        x = self.conv1_2(x)
+        logits.append(x)
+        x = F.relu(x)
+        activations.append(x)
+
+        x = self.pool(x)
+        logits.append(x)
+        x = self.dropout(x)
+
+        x = self.conv2_1(x)
+        logits.append(x)
+        x = F.relu(x)
+        activations.append(x)
+
+        x = self.conv2_2(x)
+        logits.append(x)
+        x = F.relu(x)
+        activations.append(x)
+
+        x = self.pool(x)
+        logits.append(x)
+        x = self.dropout(x)
+        
         x = torch.flatten(x, 1)
+
         x = self.fc1(x)
-        logits.append(x)
-        x = F.relu(x)
-        activations.append(x)
-
-        x = self.fc2(x) 
-        logits.append(x)
-        x = F.relu(x)
-        activations.append(x)
-
-        x = self.fc3(x)
-        logits.append(x)
-        x = F.relu(x)
-        activations.append(x)
-
-        x = self.fc4(x)
-        logits.append(x)
-        x = F.relu(x)
-        activations.append(x)
-
-        x = self.fc5(x)
-        logits.append(x)
-        x = F.relu(x)
-        activations.append(x)
-
-        x = self.fc6(x)
-        logits.append(x)
-        x = F.relu(x)
-        activations.append(x)
-
-        x = self.fc7(x)
-        logits.append(x)
-        x = F.relu(x)
-        activations.append(x)
-
-        x = self.fc8(x)
         logits.append(x)
         x = F.relu(x)
         activations.append(x)
@@ -86,18 +82,20 @@ if __name__ == "__main__":
 
     #load the data
     train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('./data', train=True, download=True,
-                    transform=transforms.Compose([
-                        transforms.ToTensor(),
-                        # transforms.Normalize((0.1307,), (0.3081,))
-                    ])),
+        datasets.CIFAR10('./data', train=True, download=True,
+                    transform = transforms.Compose([
+                                    transforms.RandomCrop(32, padding=4),
+                                    transforms.RandomHorizontalFlip(),
+                                    transforms.ToTensor(),
+                                    # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                    ])),
         batch_size=batch_size, shuffle=True)
     test_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('./data', train=False, transform=transforms.Compose([
+        datasets.CIFAR10('./data', train=False, transform=transforms.Compose([
                         transforms.ToTensor(),
-                        # transforms.Normalize((0.1307,), (0.3081,))
+                        # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                     ])),
-        batch_size=batch_size, shuffle=False)
+        batch_size=batch_size, shuffle=True)
 
     model = Net()
     if cuda:
@@ -114,7 +112,7 @@ if __name__ == "__main__":
         train(epoch, model, train_loader, optimizer, parameters)
         acc, _ = test(model, test_loader, parameters, scheduler)
         
-        if acc >= 95:
+        if acc >= 76.1:
             break
 
-    torch.save(model.state_dict(), "./Model_mnist_3.pth")
+    torch.save(model.state_dict(), "./Model_cifar_3.pth")

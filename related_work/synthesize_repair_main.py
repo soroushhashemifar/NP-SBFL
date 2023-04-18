@@ -10,8 +10,8 @@ from models.train_model_2 import Net as Net2
 from localization_Model_2 import Model2
 from utils import test, train
 import torch.optim as optim
-from models.train_model_3 import Net as Net3
-from localization_Model_3 import Model3
+from models.train_model_6 import Net as Net3
+from localization_Model_4 import Model3
 import lrp_src
 
 
