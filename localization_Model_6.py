@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from deepcp_method import DeepCP
 from models.train_model_6 import Net
-from synthesize import Synthesize, evaluation
+from synthesize import SynthesizeV2, evaluation
 from verification import Verification
 
 
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         datasets.CIFAR10('models/data', train=False, transform=transforms.Compose([
                         transforms.ToTensor(),
                     ])),
-        batch_size=128, shuffle=False)
+        batch_size=1, shuffle=False)
 
     model = Net()
     model.load_state_dict(torch.load("models/Model_cifar_3.pth", map_location="cpu"))
@@ -74,9 +74,9 @@ if __name__ == "__main__":
     # deepcp6.run()
 
     print("Synthesizing dataset for model 6")
-    model_6_synthsizer = Synthesize(deepcp6.model_name, model, test_loader, pickles_path=deepcp6.path_to_save_pickles, step_size=10, distance=0.1)
+    model_6_synthsizer = SynthesizeV2(deepcp6.model_name, model, test_loader, pickles_path=deepcp6.path_to_save_pickles, num_iterations=10, learning_rate=0.01)
     
-    suspiciousness_threshold = 5
+    suspiciousness_threshold = 10
 
     parameters = {
             "cuda": False,
@@ -84,14 +84,14 @@ if __name__ == "__main__":
         }
     model_6_synthsizer.run("tarantula", suspiciousness_threshold=suspiciousness_threshold)
     evaluation(deepcp6.model_name, "tarantula", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    model_6_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
-    evaluation(deepcp6.model_name, "ochiai", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    model_6_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
-    evaluation(deepcp6.model_name, "barinel", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    # model_6_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
+    # evaluation(deepcp6.model_name, "ochiai", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    # model_6_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
+    # evaluation(deepcp6.model_name, "barinel", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
 
     print("Verifying model 6")
     verification = Verification(deepcp6)
 
     verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold)
-    verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
-    verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold)
+    # verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
+    # verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold)

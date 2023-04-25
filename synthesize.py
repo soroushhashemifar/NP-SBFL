@@ -19,30 +19,6 @@ class Synthesize:
         self.test_loader = test_loader
         self.pickles_path = pickles_path
 
-    def synthsize_image(self, data, perturbed_data, gradients):
-        for i in range(data.shape[2]):
-            for j in range(data.shape[3]):
-                sum_grad = torch.zeros((data.shape[0], data.shape[1]))
-                for k in range(len(gradients)):
-                    sum_grad += gradients[k][:, :, i, j]
-
-                avg_grad = sum_grad / len(gradients)
-                avg_grad = avg_grad * self.step_size
-
-                # Clipping gradients.
-                avg_grad[avg_grad > self.distance] = self.distance
-                avg_grad[avg_grad < -self.distance] = -self.distance
-
-                perturbed_data[:, :, i, j] = data[:, :, i, j] + avg_grad
-
-        return perturbed_data
-
-    def applyDomainConstraints(self, perturbed_data):
-        perturbed_data[perturbed_data > 1] = 1
-        perturbed_data[perturbed_data < 0] = 0
-
-        return perturbed_data
-
     def get_suspicious_neurons(self, SFL_strategy, suspiciousness_threshold):
         with open(os.path.join(self.pickles_path, f"{self.model_name}_{SFL_strategy}_objects.pickle"), 'rb') as handle:
             self.objects_dict = pickle.load(handle)
@@ -60,6 +36,54 @@ class Synthesize:
             suspicousness_neurons_per_layer.append(layer_scores_)
 
         return suspicousness_neurons_per_layer
+
+    def run(self, SFL_strategy, suspiciousness_threshold):
+        print(f"Synthesizing {SFL_strategy}")
+        suspicousness_neurons_per_layer = self.get_suspicious_neurons(SFL_strategy, suspiciousness_threshold)
+        # print(suspicousness_neurons_per_layer)
+        synthesized_dataset = self.synthesize_testset(suspicousness_neurons_per_layer)
+        with open(f"./pickles/synthesized_dataset_{self.model_name}_{SFL_strategy}_k{suspiciousness_threshold}.pickle", 'wb') as handle:
+            pickle.dump(synthesized_dataset, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+class SynthesizeV1(Synthesize):
+
+    """
+    DeepFault synthesizer
+    """
+
+    def __init__(self, model_name, model, test_loader, pickles_path, step_size=5, distance=0.1):
+        self.step_size = step_size
+        self.distance = distance
+        self.model_name = model_name
+
+        self.model = model
+        self.test_loader = test_loader
+        self.pickles_path = pickles_path
+
+    def __synthsize_image(self, data, perturbed_data, gradients):
+        for i in range(data.shape[2]):
+            for j in range(data.shape[3]):
+                sum_grad = torch.zeros((data.shape[0], data.shape[1]))
+                for k in range(len(gradients)):
+                    sum_grad += gradients[k][:, :, i, j]
+
+                avg_grad = sum_grad / len(gradients)
+                avg_grad = avg_grad * self.step_size
+
+                # Clipping gradients.
+                avg_grad[avg_grad > self.distance] = self.distance
+                avg_grad[avg_grad < -self.distance] = -self.distance
+
+                perturbed_data[:, :, i, j] = data[:, :, i, j] + avg_grad
+
+        return perturbed_data
+
+    def __applyDomainConstraints(self, perturbed_data):
+        perturbed_data[perturbed_data > 1] = 1
+        perturbed_data[perturbed_data < 0] = 0
+
+        return perturbed_data
 
     def synthesize_testset(self, suspicousness_neurons_per_layer):
         synthesized_dataset = []
@@ -90,8 +114,8 @@ class Synthesize:
 
                 data_ = data_[mask]
                 perturbed_data = data_.clone()
-                perturbed_data = self.synthsize_image(data_, perturbed_data, gradients)
-                perturbed_data = self.applyDomainConstraints(perturbed_data)
+                perturbed_data = self.__synthsize_image(data_, perturbed_data, gradients)
+                perturbed_data = self.__applyDomainConstraints(perturbed_data)
 
                 target_ = target_[mask]
                 data_ = perturbed_data
@@ -101,13 +125,86 @@ class Synthesize:
 
         return synthesized_dataset
 
-    def run(self, SFL_strategy, suspiciousness_threshold):
-        print(f"Synthesizing {SFL_strategy}")
-        suspicousness_neurons_per_layer = self.get_suspicious_neurons(SFL_strategy, suspiciousness_threshold)
-        # print(suspicousness_neurons_per_layer)
-        synthesized_dataset = self.synthesize_testset(suspicousness_neurons_per_layer)
-        with open(f"./pickles/synthesized_dataset_{self.model_name}_{SFL_strategy}_k{suspiciousness_threshold}.pickle", 'wb') as handle:
-            pickle.dump(synthesized_dataset, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+class SynthesizeV2(Synthesize):
+
+    def __init__(self, model_name, model, test_loader, pickles_path, num_iterations=10, learning_rate=0.01):
+        self.num_iterations = num_iterations
+        self.learning_rate = learning_rate
+        self.model_name = model_name
+
+        self.model = model
+        self.test_loader = test_loader
+        self.pickles_path = pickles_path
+
+        assert test_loader.batch_size == 1, f"This synthesis procedure only works for batch size = 1 (current batch size = {test_loader.batch_size})"
+
+    def __loss_function(self, activations, layer_index, target_neurons):
+        output = activations[layer_index].reshape(activations[layer_index].shape[0], -1)
+        target_activation = output[:, target_neurons[layer_index]].sum()
+        loss = -target_activation
+
+        prev_loss = 0
+        for l_index in range(layer_index):
+            output = activations[l_index].reshape(activations[l_index].shape[0], -1)
+            prev_target_activation = output[:, target_neurons[l_index]].sum()
+            prev_loss += -prev_target_activation + torch.abs(target_activation - prev_target_activation) 
+
+        loss += prev_loss
+
+        return loss
+
+    def __generate_image(self, image, target_neurons, num_iterations=100, learning_rate=0.01):
+        image.requires_grad = True
+
+        for _ in range(num_iterations):
+            # Set up the optimizer
+            optimizer = torch.optim.Adam([image], lr=learning_rate)
+
+            # Iterate over the target neurons and optimize the image for each one
+            for i, target_neuron in enumerate(target_neurons):
+                # Zero out gradients
+                optimizer.zero_grad()
+
+                # Compute the loss as the negative activation of the target neuron
+                _, activations = self.model(image, return_logits=True)
+                loss = self.__loss_function(activations, i, target_neurons)
+
+                # Compute the gradient of the loss with respect to the image
+                loss.backward()
+
+                # Update the image using the gradient ascent algorithm
+                optimizer.step()
+
+                # Clamp the pixel values to be between 0 and 1
+                image.data.clamp_(0.0, 1.0)
+
+        return image.detach()
+
+    def synthesize_testset(self, suspicousness_neurons_per_layer):
+        synthesized_dataset = []
+        for data, target in tqdm.tqdm(self.test_loader):
+            data_ = data.clone()
+            target_ = target.clone()
+
+            outputs = self.model(data_)
+            outputs = torch.softmax(outputs, 1)
+            outputs = torch.argmax(outputs, 1)
+            mask = outputs == target_
+
+            data_ = data_[mask]
+            target_ = target_[mask]
+
+            if data_.shape[0] == 0: 
+                continue
+
+            target_neurons = list(map(lambda item: list(map(lambda item_: item_[0], item)), suspicousness_neurons_per_layer))
+            perturbed_data = self.__generate_image(data_.clone(), target_neurons, num_iterations=self.num_iterations, learning_rate=self.learning_rate)
+
+            for datam, perturbed_datam, label in zip(data_, perturbed_data, target_):
+                synthesized_dataset.append((datam.permute(1, 2, 0).detach().numpy(), perturbed_datam.permute(1, 2, 0).numpy(), label.numpy()))
+
+        return synthesized_dataset
 
 
 class SynthesizedDataset(torch.utils.data.Dataset):
@@ -121,7 +218,10 @@ class SynthesizedDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         data, perturbed_data, label = self.dataset[idx]
-        perturbed_data = torch.tensor(perturbed_data).permute(2, 0, 1)
+        if perturbed_data.shape[2] == 3:
+            perturbed_data = torch.tensor(perturbed_data).permute(2, 0, 1)
+        else:
+            perturbed_data = torch.tensor(perturbed_data)
 
         return perturbed_data, label
 

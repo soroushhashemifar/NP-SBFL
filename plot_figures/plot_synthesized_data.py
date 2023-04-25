@@ -5,9 +5,9 @@ import random
 import cv2
 
 
-for model_name in ["Model_cifar_1"]:
-    for SFL_strategy in ["tarantula", "ochiai", "barinel"]:
-        with open(f"../pickles/synthesized_dataset_{model_name}_{SFL_strategy}.pickle", 'rb') as handle:
+for model_name in ["Model_cifar_2"]:
+    for SFL_strategy in ["tarantula"]:#, "ochiai", "barinel"]:
+        with open(f"../pickles/synthesized_dataset_{model_name}_{SFL_strategy}_k10.pickle", 'rb') as handle:
             synthesized_dataset = pickle.load(handle)
 
         random.shuffle(synthesized_dataset)

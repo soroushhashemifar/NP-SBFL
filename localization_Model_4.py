@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from deepcp_method import DeepCP
 from models.train_model_4 import Net
-from synthesize import Synthesize, evaluation
+from synthesize import SynthesizeV2, evaluation
 from verification import Verification
 
 
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         datasets.CIFAR10('models/data', train=False, transform=transforms.Compose([
                         transforms.ToTensor(),
                     ])),
-        batch_size=128, shuffle=False)
+        batch_size=1, shuffle=False)
 
     model = Net()
     model.load_state_dict(torch.load("models/Model_cifar_1.pth", map_location="cpu"))
@@ -77,9 +77,9 @@ if __name__ == "__main__":
     # deepcp4.run()
 
     print("Synthesizing dataset for model 4")
-    model_4_synthsizer = Synthesize(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, step_size=10, distance=0.1)
+    model_4_synthsizer = SynthesizeV2(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, num_iterations=10, learning_rate=0.002)
     
-    suspiciousness_threshold = 5
+    suspiciousness_threshold = 10
 
     parameters = {
             "cuda": False,

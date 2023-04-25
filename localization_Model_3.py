@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from deepcp_method import DeepCP
 from models.train_model_3 import Net
-from synthesize import Synthesize, evaluation
+from synthesize_v2 import Synthesize, evaluation
 from verification import Verification
 
 
@@ -38,7 +38,7 @@ if __name__ == "__main__":
         datasets.MNIST('models/data', train=False, transform=transforms.Compose([
                         transforms.ToTensor(),
                     ])),
-        batch_size=128, shuffle=False)
+        batch_size=1, shuffle=False)
 
     model = Net()
     model.load_state_dict(torch.load("models/Model_mnist_3.pth", map_location="cpu"))
@@ -72,9 +72,9 @@ if __name__ == "__main__":
     # deepcp3.run()
 
     print("Synthesizing dataset for model 3")
-    model_3_synthsizer = Synthesize(deepcp3.model_name, model, test_loader, pickles_path=deepcp3.path_to_save_pickles, step_size=1, distance=0.1)
+    model_3_synthsizer = Synthesize(deepcp3.model_name, model, test_loader, pickles_path=deepcp3.path_to_save_pickles, num_iterations=10, learning_rate=0.01)
 
-    suspiciousness_threshold = 5
+    suspiciousness_threshold = 10
 
     parameters = {
             "cuda": False,
