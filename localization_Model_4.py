@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision import datasets, transforms
 import torch.nn.functional as F
+import numpy as np
 
 from deepcp_method import DeepCP
 from models.train_model_4 import Net
@@ -63,7 +64,6 @@ if __name__ == "__main__":
         model.out 
     ]
 
-    print("Localizing faults in model 4")
     deepcp4 = Model4(
         model_name="Model_cifar_1",
         model=model,
@@ -74,13 +74,28 @@ if __name__ == "__main__":
         alpha=0.99, 
         beta=0.6, activation_threshold=0.
     )
+    model_4_synthsizer = SynthesizeV2(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, num_iterations=10, learning_rate=0.006)
+    verification = Verification(deepcp4)
+
+    suspiciousness_threshold = 5
+
+    inters = []
+    taran = model_4_synthsizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
+    ochiai = model_4_synthsizer.get_suspicious_neurons("ochiai", suspiciousness_threshold)
+    for layer in range(1, 10):
+        taran_ = taran[layer]
+        taran_ = list(map(lambda item: item[0], taran_))
+        ochiai_ = ochiai[layer]
+        ochiai_ = list(map(lambda item: item[0], ochiai_))
+        inter = len(set(taran_).intersection(ochiai_)) / suspiciousness_threshold
+        inters.append(inter)
+
+    print("#common neurons in each layer:", np.median(inters))
+
+    # print("Localizing faults in model 4")
     # deepcp4.run()
 
     print("Synthesizing dataset for model 4")
-    model_4_synthsizer = SynthesizeV2(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, num_iterations=10, learning_rate=0.002)
-    
-    suspiciousness_threshold = 10
-
     parameters = {
             "cuda": False,
             "loss": nn.CrossEntropyLoss(),
@@ -93,8 +108,6 @@ if __name__ == "__main__":
     evaluation(deepcp4.model_name, "barinel", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
 
     print("Verifying model 4")
-    verification = Verification(deepcp4)
-
     verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold)
     verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
     verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold)

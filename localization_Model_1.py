@@ -2,10 +2,11 @@ import torch
 import torch.nn as nn
 from torchvision import datasets, transforms
 import torch.nn.functional as F
+import numpy as np
 
 from deepcp_method import DeepCP
 from models.train_model_1 import Net
-from synthesize_v2 import Synthesize, evaluation
+from synthesize import SynthesizeV2, evaluation
 from verification import Verification
 
 
@@ -55,7 +56,6 @@ if __name__ == "__main__":
         model.out
     ]
 
-    print("Localizing faults in model 1")
     deepcp1 = Model1(
         model_name="Model_mnist_1",
         model=model, 
@@ -66,13 +66,28 @@ if __name__ == "__main__":
         alpha=0.9, 
         beta=0.6, activation_threshold=0.
     )
+    model_1_synthsizer = SynthesizeV2(deepcp1.model_name, model, test_loader, pickles_path=deepcp1.path_to_save_pickles, num_iterations=10, learning_rate=0.006)
+    verification = Verification(deepcp1)
+
+    suspiciousness_threshold = 5
+
+    inters = []
+    taran = model_1_synthsizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
+    ochiai = model_1_synthsizer.get_suspicious_neurons("ochiai", suspiciousness_threshold)
+    for layer in range(1, 5):
+        taran_ = taran[layer]
+        taran_ = list(map(lambda item: item[0], taran_))
+        ochiai_ = ochiai[layer]
+        ochiai_ = list(map(lambda item: item[0], ochiai_))
+        inter = len(set(taran_).intersection(ochiai_)) / suspiciousness_threshold
+        inters.append(inter)
+
+    print("#common neurons in each layer:", np.median(inters))
+
+    # print("Localizing faults in model 1")
     # deepcp1.run()
 
     print("Synthesizing dataset for model 1")
-    model_1_synthsizer = Synthesize(deepcp1.model_name, model, test_loader, pickles_path=deepcp1.path_to_save_pickles, num_iterations=10, learning_rate=0.01)
-
-    suspiciousness_threshold = 10
-
     parameters = {
             "cuda": False,
             "loss": nn.CrossEntropyLoss(),
@@ -85,8 +100,6 @@ if __name__ == "__main__":
     evaluation(deepcp1.model_name, "barinel", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
 
     print("Verifying model 1")
-    verification = Verification(deepcp1)
-
     verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold)
     verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
     verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold)

@@ -4,10 +4,8 @@ import pickle
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torchvision import datasets, transforms
 
-from models.train_model_4 import Net
-from synthesize_v2 import SynthesizedDataset
+from synthesize import SynthesizedDataset
 from utils import test, train
 
 
@@ -18,7 +16,7 @@ def repair_model(model_name, SFL_strategy, suspiciousness_threshold, train_loade
     old_train_data = []
     for data, labels in train_loader:
         old_train_data.append((None, data[0].detach().numpy(), labels[0].item()))
-        if len(old_train_data) == len(synthesized_dataset):
+        if len(old_train_data) == 10000:
             break
 
     total_dataset = synthesized_dataset + old_train_data
@@ -53,29 +51,3 @@ def repair_model(model_name, SFL_strategy, suspiciousness_threshold, train_loade
         "accuracy": best_accuracy.item(),
         "loss": best_loss.item(),
         }, f"./models/repaired_{model_name}.pth")
-
-if __name__ == "__main__":
-    num_epochs = 10
-    learning_rate = 0.001
-    model_name = "Model_cifar_1"
-    SFL_strategy = "tarantula"
-    suspiciousness_threshold = 10
-
-    train_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR10('models/data', train=True, download=True,
-                    transform=transforms.Compose([
-                        transforms.ToTensor(),
-                    ])),
-        batch_size=1, shuffle=False)
-
-    test_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR10('models/data', train=False, transform=transforms.Compose([
-                        transforms.ToTensor(),
-                    ])),
-        batch_size=256, shuffle=False)
-
-    model = Net()
-    model.load_state_dict(torch.load(f"models/{model_name}.pth", map_location="cpu"))
-    model = model.to("cpu")
-
-    repair_model(model_name, SFL_strategy, suspiciousness_threshold, train_loader, test_loader, model, learning_rate, num_epochs)

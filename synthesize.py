@@ -139,15 +139,20 @@ class SynthesizeV2(Synthesize):
 
         assert test_loader.batch_size == 1, f"This synthesis procedure only works for batch size = 1 (current batch size = {test_loader.batch_size})"
 
-    def __loss_function(self, activations, layer_index, target_neurons):
-        output = activations[layer_index].reshape(activations[layer_index].shape[0], -1)
-        target_activation = output[:, target_neurons[layer_index]].sum()
+    def __loss_function(self, activations, layer_index, target_neurons, original_activations):
+        output = activations[layer_index].reshape(1, -1)
+        target_activation = output[:, target_neurons[layer_index]].sum(1)
         loss = -target_activation
 
-        prev_loss = 0
+        # # Keep activation of other neurons fixed
+        # remaining_neurons = list(set(range(output.shape[1])) - set(target_neurons[layer_index]))
+        # original_output = original_activations[layer_index].reshape(1, -1)
+        # loss += torch.square(original_output[:, remaining_neurons] - output[:, remaining_neurons]).sum()
+        
+        prev_loss = torch.zeros_like(loss)
         for l_index in range(layer_index):
             output = activations[l_index].reshape(activations[l_index].shape[0], -1)
-            prev_target_activation = output[:, target_neurons[l_index]].sum()
+            prev_target_activation = output[:, target_neurons[l_index]].sum(1)
             prev_loss += -prev_target_activation + torch.abs(target_activation - prev_target_activation) 
 
         loss += prev_loss
@@ -156,6 +161,9 @@ class SynthesizeV2(Synthesize):
 
     def __generate_image(self, image, target_neurons, num_iterations=100, learning_rate=0.01):
         image.requires_grad = True
+
+        with torch.no_grad():
+            _, original_activations = self.model(image, return_logits=True)
 
         for _ in range(num_iterations):
             # Set up the optimizer
@@ -168,10 +176,11 @@ class SynthesizeV2(Synthesize):
 
                 # Compute the loss as the negative activation of the target neuron
                 _, activations = self.model(image, return_logits=True)
-                loss = self.__loss_function(activations, i, target_neurons)
+                loss = self.__loss_function(activations, i, target_neurons, original_activations)
 
                 # Compute the gradient of the loss with respect to the image
-                loss.backward()
+                for j in range(loss.shape[0]):
+                    loss[j].backward(retain_graph=True)
 
                 # Update the image using the gradient ascent algorithm
                 optimizer.step()
