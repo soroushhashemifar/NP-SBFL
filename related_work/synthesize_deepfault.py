@@ -52,9 +52,6 @@ class SynthesizeV1(Synthesize):
         self.test_loader = test_loader
         self.pickles_path = pickles_path
 
-        if test_loader.batch_size == 1:
-            print("Higher values for batch size are suggested for higher speed")
-
     def __synthsize_image(self, data, perturbed_data, gradients):
         for i in range(data.shape[2]):
             for j in range(data.shape[3]):
@@ -84,7 +81,7 @@ class SynthesizeV1(Synthesize):
         for data, target in tqdm.tqdm(self.test_loader):
             data_ = data.clone()
             target_ = target.clone()
-            for iteration in range(1):
+            for iteration in range(3):
                 inputs = torch.autograd.Variable(data_, requires_grad=True)
                 outputs, features = self.model(inputs, return_logits=True)
                 outputs = torch.softmax(outputs, 1)

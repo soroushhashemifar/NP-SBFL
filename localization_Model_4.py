@@ -6,7 +6,7 @@ import numpy as np
 
 from deepcp_method import DeepCP
 from models.train_model_4 import Net
-from synthesize import SynthesizeV2, evaluation
+from synthesize import SynthesizeV1, SynthesizeV2, evaluation
 from verification import Verification
 
 
@@ -71,18 +71,23 @@ if __name__ == "__main__":
         input_size=(3, 32, 32), 
         train_loader=train_loader, 
         device="cpu",
-        alpha=0.99, 
+        alpha=0.7, 
         beta=0.6, activation_threshold=0.
     )
-    model_4_synthsizer = SynthesizeV2(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, num_iterations=10, learning_rate=0.006)
+
+    # model_4_synthsizer = SynthesizeV1(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, step_size=10, distance=0.1)
+    model_4_synthsizer = SynthesizeV2(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, num_iterations=5, learning_rate=0.08)
     verification = Verification(deepcp4)
 
-    suspiciousness_threshold = 5
+    suspiciousness_threshold = 10
+
+    # print("Localizing faults in model 4")
+    # deepcp4.run()
 
     inters = []
     taran = model_4_synthsizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
     ochiai = model_4_synthsizer.get_suspicious_neurons("ochiai", suspiciousness_threshold)
-    for layer in range(1, 10):
+    for layer in range(10):
         taran_ = taran[layer]
         taran_ = list(map(lambda item: item[0], taran_))
         ochiai_ = ochiai[layer]
@@ -90,24 +95,48 @@ if __name__ == "__main__":
         inter = len(set(taran_).intersection(ochiai_)) / suspiciousness_threshold
         inters.append(inter)
 
-    print("#common neurons in each layer:", np.median(inters))
+    print("#common neurons in each layer: (tarantula/ochiai)", np.median(inters), np.mean(inters))
 
-    # print("Localizing faults in model 4")
-    # deepcp4.run()
+    inters = []
+    taran = model_4_synthsizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
+    bari = model_4_synthsizer.get_suspicious_neurons("barinel", suspiciousness_threshold)
+    for layer in range(10):
+        taran_ = taran[layer]
+        taran_ = list(map(lambda item: item[0], taran_))
+        bari_ = bari[layer]
+        bari_ = list(map(lambda item: item[0], bari_))
+        inter = len(set(taran_).intersection(bari_)) / suspiciousness_threshold
+        inters.append(inter)
+
+    print("#common neurons in each layer: (tarantula/barinel)", np.median(inters), np.mean(inters))
+
+    inters = []
+    ochiai = model_4_synthsizer.get_suspicious_neurons("ochiai", suspiciousness_threshold)
+    bari = model_4_synthsizer.get_suspicious_neurons("barinel", suspiciousness_threshold)
+    for layer in range(10):
+        ochiai_ = ochiai[layer]
+        ochiai_ = list(map(lambda item: item[0], ochiai_))
+        bari_ = bari[layer]
+        bari_ = list(map(lambda item: item[0], bari_))
+        inter = len(set(ochiai_).intersection(bari_)) / suspiciousness_threshold
+        inters.append(inter)
+
+    print("#common neurons in each layer: (ochiai/barinel)", np.median(inters), np.mean(inters))
 
     print("Synthesizing dataset for model 4")
     parameters = {
             "cuda": False,
             "loss": nn.CrossEntropyLoss(),
         }
+
     model_4_synthsizer.run("tarantula", suspiciousness_threshold=suspiciousness_threshold)
     evaluation(deepcp4.model_name, "tarantula", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold)
+    
     model_4_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
     evaluation(deepcp4.model_name, "ochiai", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
+
     model_4_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
     evaluation(deepcp4.model_name, "barinel", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-
-    print("Verifying model 4")
-    verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold)
-    verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
     verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold)

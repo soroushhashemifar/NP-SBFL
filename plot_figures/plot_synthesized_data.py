@@ -3,11 +3,13 @@ import pickle
 import matplotlib.pyplot as plt
 import random
 import cv2
+from PIL import Image
 
+k = 5
 
-for model_name in ["Model_mnist_3"]:
-    for SFL_strategy in ["tarantula"]:#, "ochiai", "barinel"]:
-        with open(f"../pickles/synthesized_dataset_{model_name}_{SFL_strategy}_k10.pickle", 'rb') as handle:
+for model_name in ["Model_mnist_1", "Model_mnist_2", "Model_mnist_3", "Model_cifar_1", "Model_cifar_2", "Model_cifar_3"]:
+    for SFL_strategy in ["tarantula", "ochiai", "barinel"]:
+        with open(f"../pickles/synthesized_dataset_{model_name}_{SFL_strategy}_k{k}.pickle", 'rb') as handle:
             synthesized_dataset = pickle.load(handle)
 
         random.shuffle(synthesized_dataset)
@@ -23,3 +25,7 @@ for model_name in ["Model_mnist_3"]:
 
         plt.subplots_adjust(wspace=0, hspace=0)
         plt.savefig(f"./figures/synthesized_samples_{model_name}_{SFL_strategy}.png")
+
+        if "mnist" in model_name:
+            image = Image.open(f"./figures/synthesized_samples_{model_name}_{SFL_strategy}.png").convert("L")
+            image.save(f"./figures/synthesized_samples_{model_name}_{SFL_strategy}.png")

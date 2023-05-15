@@ -18,9 +18,6 @@ from utils import (myLRPModel, get_best_parameters, jaccard_sim, min_subarray_wi
                     get_tarantula_score, get_ochiai_score, get_BARINEL_score)
 
 
-from models.train_model_6 import Net
-
-
 class DeepCP:
 
     def __init__(self, model_name, model, layers_structure, alpha=0.99, beta=0.7, activation_threshold=0., input_size=(1, 28, 28), train_loader=None, 
@@ -114,7 +111,7 @@ class DeepCP:
         return criticals_mask
 
     def calculate_hit_spectrums(self):
-        critical_neurons_vector = self.find_critical_neurons()
+        # critical_neurons_vector = self.find_critical_neurons()
 
         neuron_hit_spectrums = {
             "A_P": 0, 
@@ -132,7 +129,7 @@ class DeepCP:
             if cdp_representation is None and predicted_class is None:
                 continue
 
-            # critical_neurons_vector = cdp_representation
+            critical_neurons_vector = cdp_representation
 
             if predicted_class == target:
                 neuron_hit_spectrums["A_P"] += activation_mask * critical_neurons_vector

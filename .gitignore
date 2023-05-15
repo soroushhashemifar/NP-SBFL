@@ -1,6 +1,4 @@
 __pycache__/
 .vscode/
 data/
-_*/
-_*
 synthesized_dataset_*.pickle

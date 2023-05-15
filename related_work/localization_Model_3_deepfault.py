@@ -66,18 +66,15 @@ if __name__ == "__main__":
         input_size=(1, 28, 28), 
         train_loader=train_loader, 
         device="cpu", 
-        alpha=0.7, 
+        alpha=0.9, 
         beta=0.6, activation_threshold=0.
     )
 
-    # model_3_synthsizer = SynthesizeV1(deepcp3.model_name, model, test_loader, pickles_path=deepcp3.path_to_save_pickles, step_size=1, distance=0.5)
-    model_3_synthsizer = SynthesizeV2(deepcp3.model_name, model, test_loader, pickles_path=deepcp3.path_to_save_pickles, num_iterations=5, learning_rate=0.006)
+    model_3_synthsizer = SynthesizeV1(deepcp3.model_name, model, test_loader, pickles_path=deepcp3.path_to_save_pickles, step_size=1, distance=0.1)
+    # model_3_synthsizer = SynthesizeV2(deepcp3.model_name, model, test_loader, pickles_path=deepcp3.path_to_save_pickles, num_iterations=5, learning_rate=0.006)
     verification = Verification(deepcp3)
 
-    suspiciousness_threshold = 10
-
-    # print("Localizing faults in model 3")
-    # deepcp3.run()
+    suspiciousness_threshold = 1
 
     inters = []
     taran = model_3_synthsizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
@@ -90,33 +87,10 @@ if __name__ == "__main__":
         inter = len(set(taran_).intersection(ochiai_)) / suspiciousness_threshold
         inters.append(inter)
 
-    print("#common neurons in each layer: (tarantula/ochiai)", np.median(inters), np.mean(inters))
+    print("#common neurons in each layer:", np.median(inters), np.mean(inters))
 
-    inters = []
-    taran = model_3_synthsizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
-    bari = model_3_synthsizer.get_suspicious_neurons("barinel", suspiciousness_threshold)
-    for layer in range(8):
-        taran_ = taran[layer]
-        taran_ = list(map(lambda item: item[0], taran_))
-        bari_ = bari[layer]
-        bari_ = list(map(lambda item: item[0], bari_))
-        inter = len(set(taran_).intersection(bari_)) / suspiciousness_threshold
-        inters.append(inter)
-
-    print("#common neurons in each layer: (tarantula/barinel)", np.median(inters), np.mean(inters))
-
-    inters = []
-    ochiai = model_3_synthsizer.get_suspicious_neurons("ochiai", suspiciousness_threshold)
-    bari = model_3_synthsizer.get_suspicious_neurons("barinel", suspiciousness_threshold)
-    for layer in range(8):
-        ochiai_ = ochiai[layer]
-        ochiai_ = list(map(lambda item: item[0], ochiai_))
-        bari_ = bari[layer]
-        bari_ = list(map(lambda item: item[0], bari_))
-        inter = len(set(ochiai_).intersection(bari_)) / suspiciousness_threshold
-        inters.append(inter)
-
-    print("#common neurons in each layer: (ochiai/barinel)", np.median(inters), np.mean(inters))
+    # print("Localizing faults in model 3")
+    # deepcp3.run()
 
     print("Synthesizing dataset for model 3")
     parameters = {
@@ -125,12 +99,12 @@ if __name__ == "__main__":
         }
     model_3_synthsizer.run("tarantula", suspiciousness_threshold=suspiciousness_threshold)
     evaluation(deepcp3.model_name, "tarantula", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold)
-
     model_3_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
     evaluation(deepcp3.model_name, "ochiai", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
-
     model_3_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
     evaluation(deepcp3.model_name, "barinel", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
+
+    print("Verifying model 3")
+    verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
     verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold)
