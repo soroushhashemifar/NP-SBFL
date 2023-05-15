@@ -6,6 +6,8 @@ import torch
 import tqdm
 from torch.autograd import Variable
 
+from utils import SynthesizedDataset
+
 
 class Verification:
 
@@ -90,6 +92,9 @@ class Verification:
 
         return num_failed_tests, num_total_tests_failed, num_passed_tests, num_total_tests_passed, num_activating_faulty_neurons
 
+
+class SynthesizedsetVerification(Verification):
+    
     def verify(self, SFL_strategy, suspiciousness_threshold):
         with open(f"./pickles/synthesized_dataset_{self.deepcp.model_name}_{SFL_strategy}_k{suspiciousness_threshold}.pickle", 'rb') as handle:
             synthesized_dataset = pickle.load(handle)
@@ -106,17 +111,56 @@ class Verification:
         # print("passes not activating faulty paths", num_passed_tests, num_total_tests_passed, num_passed_tests / num_total_tests_passed)
         print("synthesized samples activating faulty paths:", num_activating_faulty_neurons, num_total_tests_failed+num_total_tests_passed, num_activating_faulty_neurons / (num_total_tests_failed+num_total_tests_passed))
 
-class SynthesizedDataset(torch.utils.data.Dataset):
 
-    def __init__(self, dataset, transforms=None):
-        self.dataset = dataset
-        self.transforms = transforms
+class TestsetVerification(Verification):
 
-    def __len__(self):
-        return len(self.dataset)
+    def calculate_tests_ratio(self, faulty_paths_vectors):
+        num_failed_tests = 0
+        num_total_tests_failed = 0
+        for data, target in tqdm.tqdm(self.test_loader):
+            if self.deepcp.cuda:
+                data, target = data.cuda(), target.cuda()
 
-    def __getitem__(self, idx):
-        data, perturbed_data, label = self.dataset[idx]
-        perturbed_data = torch.tensor(perturbed_data).permute(2, 0, 1)
+            data, target = Variable(data), Variable(target)
 
-        return perturbed_data, label
+            cdp_representation, critical_neurons_layers_test, predicted_class, activation_mask = self.deepcp.generate_cdp_representation(data)
+            if cdp_representation is None and critical_neurons_layers_test is None and predicted_class is None:
+                continue
+
+            layer_flags = []
+            indices = np.cumsum([0] + self.deepcp.layer_shapes)
+            for i, faulty_paths_vector in zip(range(indices.shape[0]-1), faulty_paths_vectors):
+                mask = activation_mask[indices[i]:indices[i+1]][faulty_paths_vector.astype(bool)]
+                layer_flags.append(any(mask))
+
+            if all(layer_flags):
+                num_total_tests_failed += 1
+
+                if target != predicted_class:
+                    num_failed_tests += 1
+
+        return num_failed_tests, num_total_tests_failed
+    
+    def verify(self, test_loader, SFL_strategy, suspiciousness_threshold):
+        self.test_loader = test_loader
+
+        faulty_paths_vectors = self.get_faulty_paths_vector(SFL_strategy, suspiciousness_threshold)
+        num_failed_tests, num_total_tests_failed = self.calculate_tests_ratio(faulty_paths_vectors)
+
+        print("fails activating faulty paths:", num_failed_tests, num_total_tests_failed, num_failed_tests / num_total_tests_failed)
+
+
+# class SynthesizedDataset(torch.utils.data.Dataset):
+
+#     def __init__(self, dataset, transforms=None):
+#         self.dataset = dataset
+#         self.transforms = transforms
+
+#     def __len__(self):
+#         return len(self.dataset)
+
+#     def __getitem__(self, idx):
+#         data, perturbed_data, label = self.dataset[idx]
+#         perturbed_data = torch.tensor(perturbed_data).permute(2, 0, 1)
+
+#         return perturbed_data, label

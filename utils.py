@@ -178,3 +178,22 @@ def get_ochiai_score(path_spectrum):
 
 def get_BARINEL_score(path_spectrum):
     return 1 - path_spectrum["A_P"] / (path_spectrum["A_P"] + path_spectrum["A_F"])
+
+
+class SynthesizedDataset(torch.utils.data.Dataset):
+
+    def __init__(self, dataset, transforms=None):
+        self.dataset = dataset
+        self.transforms = transforms
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        data, perturbed_data, label = self.dataset[idx]
+        if perturbed_data.shape[2] == 3:
+            perturbed_data = torch.tensor(perturbed_data).permute(2, 0, 1)
+        else:
+            perturbed_data = torch.tensor(perturbed_data)
+
+        return perturbed_data, label

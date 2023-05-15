@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import tqdm
 
-from utils import test
+from utils import SynthesizedDataset, test
 
 
 class Synthesize:
@@ -210,23 +210,23 @@ class SynthesizeV2(Synthesize):
         return synthesized_dataset
 
 
-class SynthesizedDataset(torch.utils.data.Dataset):
+# class SynthesizedDataset(torch.utils.data.Dataset):
 
-    def __init__(self, dataset, transforms=None):
-        self.dataset = dataset
-        self.transforms = transforms
+#     def __init__(self, dataset, transforms=None):
+#         self.dataset = dataset
+#         self.transforms = transforms
 
-    def __len__(self):
-        return len(self.dataset)
+#     def __len__(self):
+#         return len(self.dataset)
 
-    def __getitem__(self, idx):
-        data, perturbed_data, label = self.dataset[idx]
-        if perturbed_data.shape[2] == 3:
-            perturbed_data = torch.tensor(perturbed_data).permute(2, 0, 1)
-        else:
-            perturbed_data = torch.tensor(perturbed_data)
+#     def __getitem__(self, idx):
+#         data, perturbed_data, label = self.dataset[idx]
+#         if perturbed_data.shape[2] == 3:
+#             perturbed_data = torch.tensor(perturbed_data).permute(2, 0, 1)
+#         else:
+#             perturbed_data = torch.tensor(perturbed_data)
 
-        return perturbed_data, label
+#         return perturbed_data, label
 
 
 def evaluation(model_name, SFL_strategy, model, test_loader, parameters, suspiciousness_threshold):

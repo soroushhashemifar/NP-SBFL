@@ -7,7 +7,7 @@ import numpy as np
 from deepcp_method import DeepCP
 from models.train_model_4 import Net
 from synthesize import SynthesizeV1, SynthesizeV2, evaluation
-from verification import Verification
+from verification import SynthesizedsetVerification, TestsetVerification, Verification
 
 
 class Model4(DeepCP):
@@ -76,8 +76,9 @@ if __name__ == "__main__":
     )
 
     # model_4_synthsizer = SynthesizeV1(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, step_size=10, distance=0.1)
-    model_4_synthsizer = SynthesizeV2(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, num_iterations=5, learning_rate=0.08)
-    verification = Verification(deepcp4)
+    model_4_synthsizer = SynthesizeV2(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, num_iterations=5, learning_rate=0.06)
+    verification = SynthesizedsetVerification(deepcp4)
+    testset_verification = TestsetVerification(deepcp4)
 
     suspiciousness_threshold = 10
 
@@ -129,14 +130,17 @@ if __name__ == "__main__":
             "loss": nn.CrossEntropyLoss(),
         }
 
-    model_4_synthsizer.run("tarantula", suspiciousness_threshold=suspiciousness_threshold)
-    evaluation(deepcp4.model_name, "tarantula", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold)
+    # model_4_synthsizer.run("tarantula", suspiciousness_threshold=suspiciousness_threshold)
+    # evaluation(deepcp4.model_name, "tarantula", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    # verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold)
+    # testset_verification.verify(test_loader, "tarantula", suspiciousness_threshold=suspiciousness_threshold)
     
-    model_4_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
-    evaluation(deepcp4.model_name, "ochiai", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
+    # model_4_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
+    # evaluation(deepcp4.model_name, "ochiai", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    # verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
+    # testset_verification.verify(test_loader, "ochiai", suspiciousness_threshold=suspiciousness_threshold)
 
-    model_4_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
-    evaluation(deepcp4.model_name, "barinel", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold)
+    # model_4_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
+    # evaluation(deepcp4.model_name, "barinel", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    # verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold)
+    # testset_verification.verify(test_loader, "barinel", suspiciousness_threshold=suspiciousness_threshold)

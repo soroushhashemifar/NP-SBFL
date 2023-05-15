@@ -7,7 +7,7 @@ import numpy as np
 from deepcp_method import DeepCP
 from models.train_model_5 import Net
 from synthesize import SynthesizeV1, SynthesizeV2, evaluation
-from verification import Verification
+from verification import SynthesizedsetVerification, Verification
 
 
 class Model5(DeepCP):
@@ -74,10 +74,10 @@ if __name__ == "__main__":
     )
 
     # model_5_synthsizer = SynthesizeV1(deepcp5.model_name, model, test_loader, pickles_path=deepcp5.path_to_save_pickles, step_size=10, distance=0.1)
-    model_5_synthsizer = SynthesizeV2(deepcp5.model_name, model, test_loader, pickles_path=deepcp5.path_to_save_pickles, num_iterations=5, learning_rate=0.08)
-    verification = Verification(deepcp5)
+    model_5_synthsizer = SynthesizeV2(deepcp5.model_name, model, test_loader, pickles_path=deepcp5.path_to_save_pickles, num_iterations=5, learning_rate=0.06)
+    verification = SynthesizedsetVerification(deepcp5)
 
-    suspiciousness_threshold = 10
+    suspiciousness_threshold = 1
 
     # print("Localizing faults in model 5")
     # deepcp5.run()

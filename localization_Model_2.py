@@ -7,7 +7,7 @@ import numpy as np
 from deepcp_method import DeepCP
 from models.train_model_2 import Net
 from synthesize import SynthesizeV1, SynthesizeV2, evaluation
-from verification import Verification
+from verification import SynthesizedsetVerification, Verification
 
 
 class Model2(DeepCP):
@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     # model_2_synthsizer = SynthesizeV1(deepcp2.model_name, model, test_loader, pickles_path=deepcp2.path_to_save_pickles, step_size=1, distance=0.5)
     model_2_synthsizer = SynthesizeV2(deepcp2.model_name, model, test_loader, pickles_path=deepcp2.path_to_save_pickles, num_iterations=5, learning_rate=0.006)
-    verification = Verification(deepcp2)
+    verification = SynthesizedsetVerification(deepcp2)
 
     suspiciousness_threshold = 10
 
