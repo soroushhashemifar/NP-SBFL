@@ -1,13 +1,15 @@
+import os
+
 import torch
 import torch.nn as nn
-from torchvision import datasets, transforms
 import torch.nn.functional as F
-import numpy as np
+from torchvision import datasets, transforms
 
-from deepcp_method import DeepCP
+from deepcp_base import DeepCP
 from models.train_model_4 import Net
 from synthesize import SynthesizeV1, SynthesizeV2, evaluation
-from verification import SynthesizedsetVerification, TestsetVerification, Verification
+from utils import report_common_neurons_SFLs
+from verification import SynthesizedsetVerification
 
 
 class Model4(DeepCP):
@@ -75,72 +77,30 @@ if __name__ == "__main__":
         beta=0.6, activation_threshold=0.
     )
 
-    # model_4_synthsizer = SynthesizeV1(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, step_size=10, distance=0.1)
-    model_4_synthsizer = SynthesizeV2(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, num_iterations=5, learning_rate=0.06)
+    # model_4_synthsizer = SynthesizeV1(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, output_path=os.path.join(deepcp4.path_to_save_pickles, "synth_v1"), step_size=10, distance=0.1)
+    model_4_synthsizer = SynthesizeV2(deepcp4.model_name, model, test_loader, pickles_path=deepcp4.path_to_save_pickles, output_path=os.path.join(deepcp4.path_to_save_pickles, "synth_v2"), num_iterations=5, learning_rate=0.06)
     verification = SynthesizedsetVerification(deepcp4)
-    testset_verification = TestsetVerification(deepcp4)
 
     suspiciousness_threshold = 10
 
     # print("Localizing faults in model 4")
     # deepcp4.run()
 
-    inters = []
-    taran = model_4_synthsizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
-    ochiai = model_4_synthsizer.get_suspicious_neurons("ochiai", suspiciousness_threshold)
-    for layer in range(10):
-        taran_ = taran[layer]
-        taran_ = list(map(lambda item: item[0], taran_))
-        ochiai_ = ochiai[layer]
-        ochiai_ = list(map(lambda item: item[0], ochiai_))
-        inter = len(set(taran_).intersection(ochiai_)) / suspiciousness_threshold
-        inters.append(inter)
-
-    print("#common neurons in each layer: (tarantula/ochiai)", np.median(inters), np.mean(inters))
-
-    inters = []
-    taran = model_4_synthsizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
-    bari = model_4_synthsizer.get_suspicious_neurons("barinel", suspiciousness_threshold)
-    for layer in range(10):
-        taran_ = taran[layer]
-        taran_ = list(map(lambda item: item[0], taran_))
-        bari_ = bari[layer]
-        bari_ = list(map(lambda item: item[0], bari_))
-        inter = len(set(taran_).intersection(bari_)) / suspiciousness_threshold
-        inters.append(inter)
-
-    print("#common neurons in each layer: (tarantula/barinel)", np.median(inters), np.mean(inters))
-
-    inters = []
-    ochiai = model_4_synthsizer.get_suspicious_neurons("ochiai", suspiciousness_threshold)
-    bari = model_4_synthsizer.get_suspicious_neurons("barinel", suspiciousness_threshold)
-    for layer in range(10):
-        ochiai_ = ochiai[layer]
-        ochiai_ = list(map(lambda item: item[0], ochiai_))
-        bari_ = bari[layer]
-        bari_ = list(map(lambda item: item[0], bari_))
-        inter = len(set(ochiai_).intersection(bari_)) / suspiciousness_threshold
-        inters.append(inter)
-
-    print("#common neurons in each layer: (ochiai/barinel)", np.median(inters), np.mean(inters))
+    report_common_neurons_SFLs(model_4_synthsizer, suspiciousness_threshold, 10)
 
     print("Synthesizing dataset for model 4")
     parameters = {
             "cuda": False,
             "loss": nn.CrossEntropyLoss(),
         }
-
-    # model_4_synthsizer.run("tarantula", suspiciousness_threshold=suspiciousness_threshold)
-    # evaluation(deepcp4.model_name, "tarantula", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    # verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold)
-    # testset_verification.verify(test_loader, "tarantula", suspiciousness_threshold=suspiciousness_threshold)
+    model_4_synthsizer.run("tarantula", suspiciousness_threshold=suspiciousness_threshold)
+    evaluation(deepcp4.model_name, "tarantula", model, model_4_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_4_synthsizer.output_path)
     
-    # model_4_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
-    # evaluation(deepcp4.model_name, "ochiai", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    # verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
-    # testset_verification.verify(test_loader, "ochiai", suspiciousness_threshold=suspiciousness_threshold)
+    model_4_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
+    evaluation(deepcp4.model_name, "ochiai", model, model_4_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_4_synthsizer.output_path)
 
-    # model_4_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
-    # evaluation(deepcp4.model_name, "barinel", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    # verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold)
-    # testset_verification.verify(test_loader, "barinel", suspiciousness_threshold=suspiciousness_threshold)
+    model_4_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
+    evaluation(deepcp4.model_name, "barinel", model, model_4_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_4_synthsizer.output_path)

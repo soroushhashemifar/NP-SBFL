@@ -197,3 +197,44 @@ class SynthesizedDataset(torch.utils.data.Dataset):
             perturbed_data = torch.tensor(perturbed_data)
 
         return perturbed_data, label
+
+
+def report_common_neurons_SFLs(synthesizer, suspiciousness_threshold, num_layers):
+    inters = []
+    taran = synthesizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
+    ochiai = synthesizer.get_suspicious_neurons("ochiai", suspiciousness_threshold)
+    for layer in range(num_layers):
+        taran_ = taran[layer]
+        taran_ = list(map(lambda item: item[0], taran_))
+        ochiai_ = ochiai[layer]
+        ochiai_ = list(map(lambda item: item[0], ochiai_))
+        inter = len(set(taran_).intersection(ochiai_)) / suspiciousness_threshold
+        inters.append(inter)
+
+    print("#common neurons in each layer: (tarantula/ochiai)", np.median(inters), np.mean(inters))
+
+    inters = []
+    taran = synthesizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
+    bari = synthesizer.get_suspicious_neurons("barinel", suspiciousness_threshold)
+    for layer in range(num_layers):
+        taran_ = taran[layer]
+        taran_ = list(map(lambda item: item[0], taran_))
+        bari_ = bari[layer]
+        bari_ = list(map(lambda item: item[0], bari_))
+        inter = len(set(taran_).intersection(bari_)) / suspiciousness_threshold
+        inters.append(inter)
+
+    print("#common neurons in each layer: (tarantula/barinel)", np.median(inters), np.mean(inters))
+
+    inters = []
+    ochiai = synthesizer.get_suspicious_neurons("ochiai", suspiciousness_threshold)
+    bari = synthesizer.get_suspicious_neurons("barinel", suspiciousness_threshold)
+    for layer in range(num_layers):
+        ochiai_ = ochiai[layer]
+        ochiai_ = list(map(lambda item: item[0], ochiai_))
+        bari_ = bari[layer]
+        bari_ = list(map(lambda item: item[0], bari_))
+        inter = len(set(ochiai_).intersection(bari_)) / suspiciousness_threshold
+        inters.append(inter)
+
+    print("#common neurons in each layer: (ochiai/barinel)", np.median(inters), np.mean(inters))

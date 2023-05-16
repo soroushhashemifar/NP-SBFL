@@ -21,19 +21,22 @@ class Synthesize:
             layer_scores_ = sorted(layer_scores_, key=lambda item: item[1], reverse=True)
             layer_scores_ = layer_scores_[:suspiciousness_threshold]
             
-            if len(layer_scores_) == 0:
-                layer_scores_ = [max(layer_scores, key=lambda item: not np.isnan(item[1]) and item[1])]
+            # if len(layer_scores_) == 0:
+            #     layer_scores_ = [max(layer_scores, key=lambda item: not np.isnan(item[1]) and item[1])]
 
             suspicousness_neurons_per_layer.append(layer_scores_)
 
         return suspicousness_neurons_per_layer
 
     def run(self, SFL_strategy, suspiciousness_threshold):
+        if not os.path.isdir(self.output_path):
+            os.makedirs(self.output_path)
+
         print(f"Synthesizing {SFL_strategy}")
         suspicousness_neurons_per_layer = self.get_suspicious_neurons(SFL_strategy, suspiciousness_threshold)
         # print(suspicousness_neurons_per_layer)
         synthesized_dataset = self.synthesize_testset(suspicousness_neurons_per_layer)
-        with open(f"./pickles/synthesized_dataset_{self.model_name}_{SFL_strategy}_k{suspiciousness_threshold}.pickle", 'wb') as handle:
+        with open(f"{self.output_path}/synthesized_dataset_{self.model_name}_{SFL_strategy}_k{suspiciousness_threshold}.pickle", 'wb') as handle:
             pickle.dump(synthesized_dataset, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
@@ -43,7 +46,7 @@ class SynthesizeV1(Synthesize):
     DeepFault synthesizer
     """
 
-    def __init__(self, model_name, model, test_loader, pickles_path, step_size=5, distance=0.1):
+    def __init__(self, model_name, model, test_loader, pickles_path, output_path, step_size=5, distance=0.1):
         self.step_size = step_size
         self.distance = distance
         self.model_name = model_name
@@ -51,6 +54,7 @@ class SynthesizeV1(Synthesize):
         self.model = model
         self.test_loader = test_loader
         self.pickles_path = pickles_path
+        self.output_path = output_path
 
         if test_loader.batch_size == 1:
             print("Higher values for batch size are suggested for higher speed")
@@ -122,7 +126,7 @@ class SynthesizeV1(Synthesize):
 
 class SynthesizeV2(Synthesize):
 
-    def __init__(self, model_name, model, test_loader, pickles_path, num_iterations=10, learning_rate=0.01):
+    def __init__(self, model_name, model, test_loader, pickles_path, output_path, num_iterations=10, learning_rate=0.01):
         self.num_iterations = num_iterations
         self.learning_rate = learning_rate
         self.model_name = model_name
@@ -130,6 +134,7 @@ class SynthesizeV2(Synthesize):
         self.model = model
         self.test_loader = test_loader
         self.pickles_path = pickles_path
+        self.output_path = output_path
 
         assert test_loader.batch_size == 1, f"This synthesis procedure only works for batch size = 1 (current batch size = {test_loader.batch_size})"
 
@@ -229,10 +234,10 @@ class SynthesizeV2(Synthesize):
 #         return perturbed_data, label
 
 
-def evaluation(model_name, SFL_strategy, model, test_loader, parameters, suspiciousness_threshold):
+def evaluation(model_name, SFL_strategy, model, synth_dataset_path, parameters, suspiciousness_threshold):
     print(f"Evaluation synthesized dataset for {SFL_strategy}")
 
-    with open(f"./pickles/synthesized_dataset_{model_name}_{SFL_strategy}_k{suspiciousness_threshold}.pickle", 'rb') as handle:
+    with open(f"{synth_dataset_path}/synthesized_dataset_{model_name}_{SFL_strategy}_k{suspiciousness_threshold}.pickle", 'rb') as handle:
         synthesized_dataset = pickle.load(handle)
 
     synth_dataset = SynthesizedDataset(synthesized_dataset)

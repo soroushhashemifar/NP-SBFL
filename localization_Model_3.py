@@ -1,13 +1,15 @@
+import os
+
 import torch
 import torch.nn as nn
-from torchvision import datasets, transforms
 import torch.nn.functional as F
-import numpy as np
+from torchvision import datasets, transforms
 
-from deepcp_method import DeepCP
+from deepcp_base import DeepCP
 from models.train_model_3 import Net
 from synthesize import SynthesizeV1, SynthesizeV2, evaluation
-from verification import SynthesizedsetVerification, Verification
+from utils import report_common_neurons_SFLs
+from verification import SynthesizedsetVerification
 
 
 class Model3(DeepCP):
@@ -70,8 +72,8 @@ if __name__ == "__main__":
         beta=0.6, activation_threshold=0.
     )
 
-    # model_3_synthsizer = SynthesizeV1(deepcp3.model_name, model, test_loader, pickles_path=deepcp3.path_to_save_pickles, step_size=1, distance=0.5)
-    model_3_synthsizer = SynthesizeV2(deepcp3.model_name, model, test_loader, pickles_path=deepcp3.path_to_save_pickles, num_iterations=5, learning_rate=0.006)
+    # model_3_synthsizer = SynthesizeV1(deepcp3.model_name, model, test_loader, pickles_path=deepcp3.path_to_save_pickles, output_path=os.path.join(deepcp3.path_to_save_pickles, "synth_v1"), step_size=1, distance=0.5)
+    model_3_synthsizer = SynthesizeV2(deepcp3.model_name, model, test_loader, pickles_path=deepcp3.path_to_save_pickles, output_path=os.path.join(deepcp3.path_to_save_pickles, "synth_v2"), num_iterations=5, learning_rate=0.006)
     verification = SynthesizedsetVerification(deepcp3)
 
     suspiciousness_threshold = 10
@@ -79,44 +81,7 @@ if __name__ == "__main__":
     # print("Localizing faults in model 3")
     # deepcp3.run()
 
-    inters = []
-    taran = model_3_synthsizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
-    ochiai = model_3_synthsizer.get_suspicious_neurons("ochiai", suspiciousness_threshold)
-    for layer in range(8):
-        taran_ = taran[layer]
-        taran_ = list(map(lambda item: item[0], taran_))
-        ochiai_ = ochiai[layer]
-        ochiai_ = list(map(lambda item: item[0], ochiai_))
-        inter = len(set(taran_).intersection(ochiai_)) / suspiciousness_threshold
-        inters.append(inter)
-
-    print("#common neurons in each layer: (tarantula/ochiai)", np.median(inters), np.mean(inters))
-
-    inters = []
-    taran = model_3_synthsizer.get_suspicious_neurons("tarantula", suspiciousness_threshold)
-    bari = model_3_synthsizer.get_suspicious_neurons("barinel", suspiciousness_threshold)
-    for layer in range(8):
-        taran_ = taran[layer]
-        taran_ = list(map(lambda item: item[0], taran_))
-        bari_ = bari[layer]
-        bari_ = list(map(lambda item: item[0], bari_))
-        inter = len(set(taran_).intersection(bari_)) / suspiciousness_threshold
-        inters.append(inter)
-
-    print("#common neurons in each layer: (tarantula/barinel)", np.median(inters), np.mean(inters))
-
-    inters = []
-    ochiai = model_3_synthsizer.get_suspicious_neurons("ochiai", suspiciousness_threshold)
-    bari = model_3_synthsizer.get_suspicious_neurons("barinel", suspiciousness_threshold)
-    for layer in range(8):
-        ochiai_ = ochiai[layer]
-        ochiai_ = list(map(lambda item: item[0], ochiai_))
-        bari_ = bari[layer]
-        bari_ = list(map(lambda item: item[0], bari_))
-        inter = len(set(ochiai_).intersection(bari_)) / suspiciousness_threshold
-        inters.append(inter)
-
-    print("#common neurons in each layer: (ochiai/barinel)", np.median(inters), np.mean(inters))
+    report_common_neurons_SFLs(model_3_synthsizer, suspiciousness_threshold, 8)
 
     print("Synthesizing dataset for model 3")
     parameters = {
@@ -124,13 +89,13 @@ if __name__ == "__main__":
             "loss": nn.CrossEntropyLoss(),
         }
     model_3_synthsizer.run("tarantula", suspiciousness_threshold=suspiciousness_threshold)
-    evaluation(deepcp3.model_name, "tarantula", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold)
+    evaluation(deepcp3.model_name, "tarantula", model, model_3_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_3_synthsizer.output_path)
 
     model_3_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
-    evaluation(deepcp3.model_name, "ochiai", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold)
+    evaluation(deepcp3.model_name, "ochiai", model, model_3_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_3_synthsizer.output_path)
 
     model_3_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
-    evaluation(deepcp3.model_name, "barinel", model, test_loader, parameters, suspiciousness_threshold=suspiciousness_threshold)
-    verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold)
+    evaluation(deepcp3.model_name, "barinel", model, model_3_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_3_synthsizer.output_path)
