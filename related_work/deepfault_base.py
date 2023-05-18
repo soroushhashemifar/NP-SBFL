@@ -90,7 +90,7 @@ class DeepFault(DeepCP):
 
 
 class Synthesize_DF(SynthesizeV1):
-    
+
     def get_suspicious_neurons(self, SFL_strategy, suspiciousness_threshold):
         with open(os.path.join(self.pickles_path, f"{self.model_name}_{SFL_strategy}_objects.pickle"), 'rb') as handle:
             self.objects_dict = pickle.load(handle)
@@ -171,28 +171,26 @@ class Verification_DF(SynthesizedsetVerification):
             if cdp_representation is None and critical_neurons_layers_test is None and predicted_class is None:
                 continue
 
+            num_activateds = 0
             layer_flags = []
             indices = np.cumsum([0] + self.deepcp.layer_shapes)
             for i, faulty_paths_vector in zip(range(indices.shape[0]-1), faulty_paths_vectors):
                 mask = activation_mask[indices[i]:indices[i+1]][faulty_paths_vector.astype(bool)]
 
-                if mask.shape[0] == 0:
-                    layer_flags.append(True)
-                else:
+                num_activateds += sum(mask)
+                if mask.shape[0] != 0:
                     layer_flags.append(any(mask))
 
-            if all(layer_flags):
+            activated_flag = all(layer_flags) and (num_activateds >= len(self.deepcp.layer_shapes))
+            if activated_flag:
                 num_activating_faulty_neurons += 1
 
             if target != predicted_class:
                 num_total_tests_failed += 1
 
-                if all(layer_flags):
+                if activated_flag:
                     num_failed_tests += 1
             else:
                 num_total_tests_passed += 1
-
-                if not all(layer_flags):
-                    num_passed_tests += 1
 
         return num_failed_tests, num_total_tests_failed, num_passed_tests, num_total_tests_passed, num_activating_faulty_neurons

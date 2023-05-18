@@ -105,7 +105,7 @@ class SynthesizedsetVerification(Verification):
             batch_size=1, shuffle=False)
 
         faulty_paths_vectors = self.get_faulty_paths_vector(SFL_strategy, suspiciousness_threshold)
-        num_failed_tests, num_total_tests_failed, num_passed_tests, num_total_tests_passed, num_activating_faulty_neurons = self.calculate_tests_ratio(faulty_paths_vectors, suspiciousness_threshold)
+        num_failed_tests, num_total_tests_failed, num_passed_tests, num_total_tests_passed, num_activating_faulty_neurons = self.calculate_tests_ratio(faulty_paths_vectors)
 
         print("fails activating faulty paths:", num_failed_tests, num_total_tests_failed, num_failed_tests / num_total_tests_failed)
         # print("passes not activating faulty paths", num_passed_tests, num_total_tests_passed, num_passed_tests / num_total_tests_passed)

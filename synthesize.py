@@ -56,6 +56,8 @@ class SynthesizeV1(Synthesize):
         self.pickles_path = pickles_path
         self.output_path = output_path
 
+        self.num_iterations = 1
+
         if test_loader.batch_size == 1:
             print("Higher values for batch size are suggested for higher speed")
 
@@ -88,7 +90,7 @@ class SynthesizeV1(Synthesize):
         for data, target in tqdm.tqdm(self.test_loader):
             data_ = data.clone()
             target_ = target.clone()
-            for iteration in range(1):
+            for iteration in range(self.num_iterations):
                 inputs = torch.autograd.Variable(data_, requires_grad=True)
                 outputs, features = self.model(inputs, return_logits=True)
                 outputs = torch.softmax(outputs, 1)

@@ -73,7 +73,7 @@ if __name__ == "__main__":
     model_1_synthsizer = SynthesizeV2(deepcp1.model_name, model, test_loader, pickles_path=deepcp1.path_to_save_pickles, output_path=os.path.join(deepcp1.path_to_save_pickles, "synth_v2"), num_iterations=5, learning_rate=0.006)
     verification = SynthesizedsetVerification(deepcp1)
 
-    suspiciousness_threshold = 5
+    suspiciousness_threshold = 1
 
     # print("Localizing faults in model 1")
     # deepcp1.run()
@@ -85,14 +85,14 @@ if __name__ == "__main__":
             "cuda": False,
             "loss": nn.CrossEntropyLoss(),
         }
-    model_1_synthsizer.run("tarantula", suspiciousness_threshold=suspiciousness_threshold)
-    evaluation(deepcp1.model_name, "tarantula", model, model_1_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    # model_1_synthsizer.run("tarantula", suspiciousness_threshold=suspiciousness_threshold)
+    # evaluation(deepcp1.model_name, "tarantula", model, model_1_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
     verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_1_synthsizer.output_path)
 
-    model_1_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
-    evaluation(deepcp1.model_name, "ochiai", model, model_1_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    # model_1_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
+    # evaluation(deepcp1.model_name, "ochiai", model, model_1_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
     verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_1_synthsizer.output_path)
 
-    model_1_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
-    evaluation(deepcp1.model_name, "barinel", model, model_1_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    # model_1_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
+    # evaluation(deepcp1.model_name, "barinel", model, model_1_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
     verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_1_synthsizer.output_path)

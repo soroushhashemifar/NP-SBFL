@@ -64,28 +64,28 @@ if __name__ == "__main__":
         get_relevancy_and_activations_fn=deepcp6.get_relevancy_and_activations
     )
 
-    suspiciousness_threshold = 1
-    num_susp_neurons = suspiciousness_threshold * 8
+    suspiciousness_threshold = 10
+    num_susp_neurons = suspiciousness_threshold * 7
 
     model_6_synthsizer = Synthesize_DF(deepfault6.model_name, model, test_loader, pickles_path=deepfault6.path_to_save_pickles, output_path=os.path.join(deepfault6.path_to_save_pickles, "synth_v1"), step_size=10, distance=0.1)
     verification = Verification_DF(deepfault6)
 
-    print("Localizing faults in model 6")
-    deepfault6.run()
+    # print("Localizing faults in model 6")
+    # deepfault6.run()
 
-    # print("Synthesizing dataset for model 6")
-    # parameters = {
-    #         "cuda": False,
-    #         "loss": nn.CrossEntropyLoss(),
-    #     }
-    # model_6_synthsizer.run("tarantula", suspiciousness_threshold=num_susp_neurons)
-    # evaluation(deepfault6.model_name, "tarantula", model, model_6_synthsizer.output_path, parameters, suspiciousness_threshold=num_susp_neurons)
-    # verification.verify("tarantula", suspiciousness_threshold=num_susp_neurons, synth_dataset_path=model_6_synthsizer.output_path)
+    print("Synthesizing dataset for model 6")
+    parameters = {
+            "cuda": False,
+            "loss": nn.CrossEntropyLoss(),
+        }
+    model_6_synthsizer.run("tarantula", suspiciousness_threshold=num_susp_neurons)
+    evaluation(deepfault6.model_name, "tarantula", model, model_6_synthsizer.output_path, parameters, suspiciousness_threshold=num_susp_neurons)
+    verification.verify("tarantula", suspiciousness_threshold=num_susp_neurons, synth_dataset_path=model_6_synthsizer.output_path)
 
-    # model_6_synthsizer.run("ochiai", suspiciousness_threshold=num_susp_neurons)
-    # evaluation(deepfault6.model_name, "ochiai", model, model_6_synthsizer.output_path, parameters, suspiciousness_threshold=num_susp_neurons)
-    # verification.verify("ochiai", suspiciousness_threshold=num_susp_neurons, synth_dataset_path=model_6_synthsizer.output_path)
+    model_6_synthsizer.run("ochiai", suspiciousness_threshold=num_susp_neurons)
+    evaluation(deepfault6.model_name, "ochiai", model, model_6_synthsizer.output_path, parameters, suspiciousness_threshold=num_susp_neurons)
+    verification.verify("ochiai", suspiciousness_threshold=num_susp_neurons, synth_dataset_path=model_6_synthsizer.output_path)
 
-    # model_6_synthsizer.run("barinel", suspiciousness_threshold=num_susp_neurons)
-    # evaluation(deepfault6.model_name, "barinel", model, model_6_synthsizer.output_path, parameters, suspiciousness_threshold=num_susp_neurons)
-    # verification.verify("barinel", suspiciousness_threshold=num_susp_neurons, synth_dataset_path=model_6_synthsizer.output_path)
+    model_6_synthsizer.run("barinel", suspiciousness_threshold=num_susp_neurons)
+    evaluation(deepfault6.model_name, "barinel", model, model_6_synthsizer.output_path, parameters, suspiciousness_threshold=num_susp_neurons)
+    verification.verify("barinel", suspiciousness_threshold=num_susp_neurons, synth_dataset_path=model_6_synthsizer.output_path)
