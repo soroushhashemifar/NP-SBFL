@@ -65,7 +65,7 @@ if __name__ == "__main__":
         get_relevancy_and_activations_fn=deepcp5.get_relevancy_and_activations
     )
 
-    suspiciousness_threshold = 10
+    suspiciousness_threshold = 50
     num_susp_neurons = suspiciousness_threshold * 8
 
     model_5_synthsizer = Synthesize_DF(deepfault5.model_name, model, test_loader, pickles_path=deepfault5.path_to_save_pickles, output_path=os.path.join(deepfault5.path_to_save_pickles, "synth_v1"), step_size=10, distance=0.1)

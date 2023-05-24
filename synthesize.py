@@ -46,7 +46,7 @@ class SynthesizeV1(Synthesize):
     DeepFault synthesizer
     """
 
-    def __init__(self, model_name, model, test_loader, pickles_path, output_path, step_size=5, distance=0.1):
+    def __init__(self, model_name, model, test_loader, pickles_path, output_path="", step_size=5, distance=0.1):
         self.step_size = step_size
         self.distance = distance
         self.model_name = model_name
@@ -58,7 +58,7 @@ class SynthesizeV1(Synthesize):
 
         self.num_iterations = 1
 
-        if test_loader.batch_size == 1:
+        if test_loader is not None and test_loader.batch_size == 1:
             print("Higher values for batch size are suggested for higher speed")
 
     def __synthsize_image(self, data, perturbed_data, gradients):
@@ -128,7 +128,7 @@ class SynthesizeV1(Synthesize):
 
 class SynthesizeV2(Synthesize):
 
-    def __init__(self, model_name, model, test_loader, pickles_path, output_path, num_iterations=10, learning_rate=0.01):
+    def __init__(self, model_name, model, test_loader, pickles_path, output_path="", num_iterations=10, learning_rate=0.01):
         self.num_iterations = num_iterations
         self.learning_rate = learning_rate
         self.model_name = model_name
@@ -138,7 +138,8 @@ class SynthesizeV2(Synthesize):
         self.pickles_path = pickles_path
         self.output_path = output_path
 
-        assert test_loader.batch_size == 1, f"This synthesis procedure only works for batch size = 1 (current batch size = {test_loader.batch_size})"
+        if test_loader is not None:
+            assert test_loader.batch_size == 1, f"This synthesis procedure only works for batch size = 1 (current batch size = {test_loader.batch_size})"
 
     def __loss_function(self, activations, layer_index, target_neurons, original_activations):
         output = activations[layer_index].reshape(1, -1)
