@@ -76,7 +76,7 @@ if __name__ == "__main__":
     )
 
     # model_5_synthsizer = SynthesizeV1(deepcp5.model_name, model, test_loader, pickles_path=deepcp5.path_to_save_pickles, output_path=os.path.join(deepcp5.path_to_save_pickles, "synth_v1"), step_size=10, distance=0.1)
-    model_5_synthsizer = SynthesizeV2(deepcp5.model_name, model, test_loader, pickles_path=deepcp5.path_to_save_pickles, output_path=os.path.join(deepcp5.path_to_save_pickles, "synth_v2"), num_iterations=10, learning_rate=0.06)
+    model_5_synthsizer = SynthesizeV2(deepcp5.model_name, model, test_loader, pickles_path=deepcp5.path_to_save_pickles, output_path=os.path.join(deepcp5.path_to_save_pickles, "synth_v2"), num_iterations=5, learning_rate=0.02)
     verification = SynthesizedsetVerification(deepcp5)
 
     suspiciousness_threshold = 50
