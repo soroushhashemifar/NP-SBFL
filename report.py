@@ -16,6 +16,8 @@ for model_name in ["Model_mnist_1", "Model_mnist_2", "Model_mnist_3"]:
             mean_l_inf = []
             for triple in synthesized_dataset:
                 image, perturbed_image, _ = triple
+                image *= 255
+                perturbed_image *= 255
                 delta = (image - perturbed_image).ravel()
                 l1 = np.linalg.norm(delta, ord=1)
                 mean_l1.append(l1)
@@ -44,6 +46,8 @@ for model_name in ["Model_cifar_1", "Model_cifar_2", "Model_cifar_3"]:
             mean_l_inf = []
             for triple in synthesized_dataset:
                 image, perturbed_image, _ = triple
+                image *= 255
+                perturbed_image *= 255
                 delta = (image - perturbed_image).ravel()
                 l1 = np.linalg.norm(delta, ord=1)
                 mean_l1.append(l1)
