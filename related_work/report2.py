@@ -1,10 +1,13 @@
 import pickle
 import numpy as np
+from torchmetrics.image.inception import InceptionScore
+from torchmetrics.image.fid import FrechetInceptionDistance
+import torch
 
 
 synth_dataset_path = "./pickles_deepfault/synth_v1"
 
-print(f"model_name \t SFL_strategy \t k \t num_samples \t mean L1 \t mean L2 \t mean L_inf")
+print(f"model_name \t SFL_strategy \t k \t num_samples \t mean L1 \t mean L2 \t mean L_inf \t IS natural (mean) \t IS natural (std) \t FID natural")
 for model_name, num_layers in [("Model_mnist_1", 5), ("Model_mnist_2", 6), ("Model_mnist_3", 8)]:
     for SFL_strategy in ["tarantula", "ochiai", "barinel"]: 
         for suspiciousness_threshold in [1, 5, 10]:
@@ -35,7 +38,7 @@ for model_name, num_layers in [("Model_mnist_1", 5), ("Model_mnist_2", 6), ("Mod
             mean_l_inf = np.mean(mean_l_inf)
             mean_l_inf = "{:.3f}".format(mean_l_inf)          
 
-            print(f"{model_name} \t {SFL_strategy} \t {suspiciousness_threshold} \t {len(synthesized_dataset)} \t {mean_l1} \t {mean_l2} \t {mean_l_inf}")
+            print(f"{model_name} \t {SFL_strategy} \t {suspiciousness_threshold} \t {len(synthesized_dataset)} \t {mean_l1} \t {mean_l2} \t {mean_l_inf} \t - \t - \t -")
 
 for model_name, num_layers in [("Model_cifar_1", 10), ("Model_cifar_2", 8), ("Model_cifar_3", 7)]:
     for SFL_strategy in ["tarantula", "ochiai", "barinel"]: 
@@ -65,4 +68,25 @@ for model_name, num_layers in [("Model_cifar_1", 10), ("Model_cifar_2", 8), ("Mo
             mean_l_inf = np.mean(mean_l_inf)
             mean_l_inf = "{:.3f}".format(mean_l_inf)          
 
-            print(f"{model_name} \t {SFL_strategy} \t {suspiciousness_threshold} \t {len(synthesized_dataset)} \t {mean_l1} \t {mean_l2} \t {mean_l_inf}")
+            metric_IS = InceptionScore(feature=64, normalize=True)
+            metric_FID = FrechetInceptionDistance(feature=64, normalize=True)
+
+            perturbed_images = torch.concat([torch.tensor(triple[1]).permute(2, 0 ,1).unsqueeze(0) for triple in synthesized_dataset])
+            for i in range(0, perturbed_images.shape[0], 500):
+                metric_IS.update(perturbed_images[i:i+500])
+            
+            is_1, is_2 = metric_IS.compute()
+            is_1 = "{:.3f}".format(is_1.item())
+            is_2 = "{:.3f}".format(is_2.item())
+
+            real_images = torch.concat([torch.tensor(triple[0]).permute(2, 0 ,1).unsqueeze(0) for triple in synthesized_dataset])
+            for i in range(0, real_images.shape[0], 500):
+                metric_FID.update(real_images[i:i+500], real=True)
+
+            for i in range(0, perturbed_images.shape[0], 500):
+                metric_FID.update(perturbed_images[i:i+500], real=False)
+
+            fid = metric_FID.compute()
+            fid = "{:.3f}".format(fid.item())
+
+            print(f"{model_name} \t {SFL_strategy} \t {suspiciousness_threshold} \t {len(synthesized_dataset)} \t {mean_l1} \t {mean_l2} \t {mean_l_inf} \t {is_1} \t {is_2} \t {fid}")
