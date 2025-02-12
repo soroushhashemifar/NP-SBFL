@@ -191,7 +191,7 @@ class SynthesizedDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         data, perturbed_data, label = self.dataset[idx]
-        if perturbed_data.shape[2] == 3:
+        if perturbed_data.shape[2] in [1, 3]:
             perturbed_data = torch.tensor(perturbed_data).permute(2, 0, 1)
         else:
             perturbed_data = torch.tensor(perturbed_data)

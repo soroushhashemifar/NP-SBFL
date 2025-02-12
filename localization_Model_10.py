@@ -1,0 +1,113 @@
+import os
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision import datasets, transforms
+from sklearn.model_selection import train_test_split
+import numpy as np
+
+from deepcp_base import DeepCP
+from models.train_model_10 import Net
+from synthesize import SynthesizeV1, SynthesizeV2, evaluation
+from utils import report_common_neurons_SFLs
+from verification import SynthesizedsetVerification
+
+
+class Model10(DeepCP):
+    
+    def get_relevancy_and_activations(self, data):
+        relevancies, activations = self.lrp_model.forward(data)
+
+        predicted_class = torch.argmax(torch.softmax(activations[-1][1], 1)).item()
+
+        relevancy = [(r[0], r[1].flatten(1)) for r in relevancies]
+        activations = [(a[0], a[1].flatten(1)) for a in activations[:-1]]
+
+        relevancy = list(filter(lambda item: item[0] in ["RelevancePropagationConv2d", "RelevancePropagationMaxPool2d", "RelevancePropagationLinear"], relevancy))
+        relevancy = list(map(lambda item: item[1], relevancy))
+        activations = list(filter(lambda item: item[0] in ["RelevancePropagationConv2d", "RelevancePropagationMaxPool2d", "RelevancePropagationLinear"], activations))
+        activations = list(map(lambda item: F.relu(item[1]) if item[0] in ["RelevancePropagationConv2d", "RelevancePropagationLinear"] else item[1], activations))
+
+        g_fx = torch.sum(relevancies[0][1]).item()
+
+        return relevancy, activations, g_fx, predicted_class
+
+
+if __name__ == "__main__":
+    dataset = datasets.Caltech101('models/data', target_type='category', download=True,
+                    transform = transforms.Compose([
+                                    transforms.Resize((32, 32)),
+                                    transforms.Lambda(lambda item: item.convert('RGB')),
+                                    transforms.RandomHorizontalFlip(),
+                                    transforms.RandomVerticalFlip(),
+                                    transforms.ToTensor(),
+                                    # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                                    ]))
+    targets = dataset.y
+    train_idx, test_idx = train_test_split(np.arange(len(targets)), test_size=0.05, random_state=42, shuffle=True, stratify=targets)
+    train_set = torch.utils.data.Subset(dataset, train_idx)
+    val_set = torch.utils.data.Subset(dataset, test_idx)
+    train_loader = torch.utils.data.DataLoader(
+        train_set,
+        batch_size=1, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(
+        val_set,
+        batch_size=1, shuffle=False)
+
+    model = Net()
+    model.load_state_dict(torch.load("models/Model_caltech101_1.pth", map_location="cpu"))
+    model = model.to("cpu")
+    model.eval()
+
+    layers_structure = [
+        model.conv1_1, torch.nn.ReLU(),
+        model.conv1_2, torch.nn.ReLU(), 
+        model.pool, 
+        model.conv2_1, torch.nn.ReLU(), 
+        model.conv2_2, torch.nn.ReLU(), 
+        model.pool, 
+        torch.nn.Flatten(1), 
+        model.fc1, torch.nn.ReLU(), 
+        model.fc2, torch.nn.ReLU(), 
+        model.out 
+    ]
+
+    deepcp10 = Model10(
+        model_name="Model_caltech101_1",
+        model=model,
+        layers_structure=layers_structure, 
+        input_size=(3, 32, 32), 
+        train_loader=train_loader, 
+        device="cpu",
+        alpha=0.7, 
+        activation_threshold=0.
+    )
+
+    # model_10_synthsizer = SynthesizeV1(deepcp10.model_name, model, test_loader, pickles_path=deepcp10.path_to_save_pickles, output_path=os.path.join(deepcp10.path_to_save_pickles, "synth_v1"), step_size=10, distance=0.1)
+    model_10_synthsizer = SynthesizeV2(deepcp10.model_name, model, test_loader, pickles_path=deepcp10.path_to_save_pickles, output_path=os.path.join(deepcp10.path_to_save_pickles, "synth_v2"), num_iterations=5, learning_rate=0.02)
+    verification = SynthesizedsetVerification(deepcp10)
+
+    suspiciousness_threshold = 50
+
+    print("Localizing faults in model 10")
+    deepcp10.run()
+
+    report_common_neurons_SFLs(model_10_synthsizer, suspiciousness_threshold, 8)
+
+    print("Synthesizing dataset for model 10")
+    parameters = {
+            "cuda": False,
+            "loss": nn.CrossEntropyLoss(),
+        }
+    model_10_synthsizer.run("tarantula", suspiciousness_threshold=suspiciousness_threshold)
+    evaluation(deepcp10.model_name, "tarantula", model, model_10_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("tarantula", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_10_synthsizer.output_path)
+
+    model_10_synthsizer.run("ochiai", suspiciousness_threshold=suspiciousness_threshold)
+    evaluation(deepcp10.model_name, "ochiai", model, model_10_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("ochiai", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_10_synthsizer.output_path)
+
+    model_10_synthsizer.run("barinel", suspiciousness_threshold=suspiciousness_threshold)
+    evaluation(deepcp10.model_name, "barinel", model, model_10_synthsizer.output_path, parameters, suspiciousness_threshold=suspiciousness_threshold)
+    verification.verify("barinel", suspiciousness_threshold=suspiciousness_threshold, synth_dataset_path=model_10_synthsizer.output_path)
